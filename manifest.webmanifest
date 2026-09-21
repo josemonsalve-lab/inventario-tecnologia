@@ -1,0 +1,30 @@
+{
+  "name": "Rex+ Inventario de equipos",
+  "short_name": "Rex+ Inventario",
+  "description": "Control de equipos por número de serie, con foto del producto y proveedor.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5fafd",
+  "theme_color": "#0a5c85",
+  "lang": "es-CL",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
