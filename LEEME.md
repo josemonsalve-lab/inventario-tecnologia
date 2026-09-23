@@ -124,6 +124,14 @@ Abajo va el campo de series. Escribes una y pulsas Enter, y el campo queda listo
 
 Al elegir el equipo aparece su foto y su precio, para confirmar de un vistazo que estás ingresando el modelo correcto. Cada serie agregada se lista en pantalla y las repetidas quedan marcadas en rojo con el aviso de que no se guardarán, así no se duplica nada. El botón final dice cuántos equipos va a guardar. Todos entran con el mismo proveedor y la misma factura, y quedan registrados en el historial en una sola línea.
 
+### Entregar varios equipos al mismo cliente
+
+En la pestaña Equipos, cada fila tiene un cuadro para marcarla. Al marcar uno o más aparece el botón **Asignar N equipos a un cliente**, que abre una sola ventana con el nombre del cliente, la fecha de entrega, el tipo, el vendedor, el instalador y la ubicación.
+
+Lo que se aplica es lo que escribas: los campos que dejes vacíos no se tocan en cada equipo, así que puedes asignar solo el cliente y conservar los vendedores que ya tenía cada uno. Todos pasan a Entregado y queda un único movimiento en el historial, "Entrega de N equipos a Cliente".
+
+El botón *Todos* marca los equipos que estés viendo, así que si primero filtras por situación o buscas por modelo, la selección respeta ese filtro.
+
 ### Qué se edita en cada lugar
 
 Los datos que identifican al equipo —número de serie, modelo, proveedor, factura, orden de compra, costo y fecha de ingreso— se definen una sola vez, al ingresarlo, y no se editan desde la ficha individual. La ficha muestra la serie, la fecha de ingreso y la situación actual arriba, y el modelo con su código junto a la foto. Lo editable es lo que cambia con el uso: estado, ubicación, cliente, vendedor, fecha de entrega, tipo, observaciones y la foto de la unidad.

@@ -1,5 +1,5 @@
 /* Service worker: deja la app disponible sin internet. */
-const CACHE = "inventario-v42";
+const CACHE = "inventario-v45";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./logo-rex.png", "./jspdf.umd.min.js", "./xlsx.mini.min.js", "./icon-192.png", "./icon-512.png", "./icon-maskable.png"];
 
 self.addEventListener("install", e => {

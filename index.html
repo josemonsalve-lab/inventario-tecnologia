@@ -124,9 +124,11 @@ label.f>span{display:block;font-size:13px;font-weight:700;color:var(--azul);marg
 .tira.on{border-color:var(--celeste)}
 .tira img{width:100%;height:100%;object-fit:cover}
 .tira .x{position:absolute;top:-1px;right:-1px;background:var(--rojo);color:#fff;width:20px;height:20px;border-radius:0 8px 0 8px;font-size:12px;line-height:20px;text-align:center;font-weight:700}
-.marca{width:22px;height:22px;flex-shrink:0;border-radius:6px;border:2px solid var(--linea);background:#fff;
-  display:flex;align-items:center;justify-content:center}
-.marca.on{background:var(--celeste);border-color:var(--celeste)}
+.marca{width:20px;height:20px;flex-shrink:0;border-radius:6px;border:2px solid #86b8d2;background:#eef6fb;
+  display:flex;align-items:center;justify-content:center;transition:background .12s,border-color .12s}
+.marca:active{background:#d7ecf7}
+.marca.on{background:var(--celeste);border-color:var(--celeste);box-shadow:0 0 0 3px rgba(0,186,255,.2)}
+.fila.sel{background:#e9f7ff;border-color:var(--celeste)}
 .mini-foto{width:46px;height:46px;border-radius:10px;overflow:hidden;background:#eef3f8;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;color:#b9c6d3;position:relative}
 .mini-foto img{width:100%;height:100%;object-fit:cover}
@@ -491,7 +493,7 @@ async function usarCache(){
 /* ------------------------------------------------------------------ estado */
 const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
-  cotizaciones: [], cot: null,
+  cotizaciones: [], cot: null, selEq: {},
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
@@ -796,14 +798,30 @@ function vistaEquipos(){
   if(!A.unidades.length) return chips + vacio("Sin equipos registrados", "Ingresa los equipos por número de serie eligiendo modelo, proveedor y factura.", "Ingresar equipos", "nueva-unidad");
   if(!us.length) return chips + vacio("Ningún equipo coincide", "Revisa el filtro de situación o el texto buscado.");
 
-  return chips + '<div class="lista">' + us.slice(0, 300).map(u => {
+  const enPantalla = us.slice(0, 300);
+  const nSel = Object.values(A.selEq).filter(Boolean).length;
+  const barra = '<div class="fila" style="margin-bottom:8px"><div class="t"><b>' +
+    (nSel ? nf.format(nSel) + (nSel === 1 ? " equipo seleccionado" : " equipos seleccionados")
+          : "Entrega varios a la vez") + '</b><span>' +
+    (nSel ? "Asígnalos a un cliente en una sola operación." : "Marca los cuadros para asignarlos a un mismo cliente.") +
+    '</span></div>' +
+    '<button class="btn btn-linea btn-sm" data-accion="' + (nSel ? "eq-ninguno" : "eq-todos") + '">' +
+      (nSel ? "Quitar" : "Todos") + '</button></div>' +
+    (nSel ? '<button class="btn btn-celeste btn-w" style="margin-bottom:10px" data-accion="asignar-cliente">' +
+      'Asignar ' + nf.format(nSel) + (nSel === 1 ? " equipo a un cliente" : " equipos a un cliente") + '</button>' : "");
+
+  return chips + barra + '<div class="lista">' + enPantalla.map(u => {
     const m = modelo(u.codigo), p = proveedor(u.proveedorId), f = fotoEquipo(u);
-    return '<button class="fila" data-unidad="' + u.id + '">' +
+    const on = !!A.selEq[u.id];
+    return '<div class="fila' + (on ? " sel" : "") + '">' +
+      '<button class="marca' + (on ? " on" : "") + '" data-seleq="' + u.id + '">' +
+        (on ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M5 13l4 4L19 7"/></svg>' : "") + '</button>' +
+      '<button class="fila" data-unidad="' + u.id + '" style="border:0;padding:0;background:none;flex:1;min-width:0">' +
       '<span class="mini-foto' + (f.propia ? "" : " heredada") + '">' +
         (f.url ? '<img src="' + f.url + '" alt="">' : ICONO_EQUIPO) + '</span>' +
       '<div class="t"><b>' + esc(u.serie) + '</b>' +
       '<span>' + esc(u.codigo) + (m && m.modelo ? " · " + esc(m.modelo) : "") + (u.cliente ? " · " + esc(u.cliente) : "") + (p ? " · " + esc(p.nombre) : "") + '</span></div>' +
-      '<span class="pt ' + (CLASE_SIT[u.situacion] || "pt-ent") + '">' + esc(u.situacion) + '</span></button>';
+      '<span class="pt ' + (CLASE_SIT[u.situacion] || "pt-ent") + '">' + esc(u.situacion) + '</span></button></div>';
   }).join("") + '</div>' +
   (us.length > 300 ? '<p class="mini" style="text-align:center;margin-top:12px">Se muestran los primeros 300 de ' + nf.format(us.length) + '. Afina la búsqueda para ver el resto.</p>' : "");
 }
@@ -1851,9 +1869,9 @@ function vistaReportes(){
 
     (R.filas.length ? '<div class="lista">' + R.filas.map(f => {
       const marcada = filaElegida(f.clave);
-      return '<div class="fila">' +
+      return '<div class="fila' + (marcada ? " sel" : "") + '">' +
         '<button class="marca' + (marcada ? " on" : "") + '" data-selfila="' + esc(f.clave) + '">' +
-          (marcada ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 13l4 4L19 7"/></svg>' : "") + '</button>' +
+          (marcada ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M5 13l4 4L19 7"/></svg>' : "") + '</button>' +
         '<' + (f.id ? 'button class="t" data-unidad="' + f.id + '" style="text-align:left"' : 'div class="t"') + '>' +
         '<b>' + esc(f.t) + '</b><span>' + f.s + '</span></' + (f.id ? "button" : "div") + '>' +
         (f.v !== "" && f.v !== undefined ? (typeof f.v === "number"
@@ -2605,6 +2623,63 @@ async function plantillaExcel(){
   }catch(e){ avisar("No se pudo generar la plantilla"); }
 }
 
+/* --- entregar varios equipos al mismo cliente --- */
+function seleccionEquipos(){
+  return A.unidades.filter(u => A.selEq[u.id]);
+}
+
+function modalAsignarCliente(){
+  const us = seleccionEquipos();
+  if(!us.length) return avisar("No hay equipos seleccionados");
+  ctx = { tipo: "asignar" };
+  const yaEntregados = us.filter(u => u.cliente).length;
+  const clientes = [...new Set(A.unidades.map(u => u.cliente).filter(Boolean))].sort();
+  const vendedores = [...new Set(A.unidades.map(u => u.vendedor).filter(Boolean))].sort();
+  const instaladores = [...new Set(A.unidades.map(u => u.instalador).filter(Boolean))].sort();
+  abrirModal(
+    '<div class="fila" style="display:block"><div class="t"><b>' + nf.format(us.length) +
+      (us.length === 1 ? " equipo" : " equipos") + '</b><span>' +
+      esc(us.slice(0, 8).map(u => u.serie).join(", ")) +
+      (us.length > 8 ? " y " + (us.length - 8) + " más" : "") + '</span></div></div>' +
+    (yaEntregados ? '<p class="aviso">' + yaEntregados + ' ya tienen cliente asignado y se reemplazará.</p>' : "") +
+    '<label class="f"><span>Cliente</span><input class="inp" id="as-cliente" list="clientes" placeholder="Nombre de la empresa"></label>' +
+    '<datalist id="clientes">' + clientes.map(c => '<option value="' + esc(c) + '">').join("") + '</datalist>' +
+    '<div class="f2"><label class="f"><span>Fecha de entrega</span><input class="inp" id="as-entrega" type="date" value="' + hoy() + '"></label>' +
+    '<label class="f"><span>Tipo</span><select class="inp" id="as-tipo">' + opciones(["—","Venta","Arriendo","Préstamo"], "—") + '</select></label></div>' +
+    '<div class="f2"><label class="f"><span>Vendedor</span><input class="inp" id="as-vendedor" list="vend2"></label>' +
+    '<label class="f"><span>Instalador</span><input class="inp" id="as-instalador" list="inst2"></label></div>' +
+    '<datalist id="vend2">' + vendedores.map(v => '<option value="' + esc(v) + '">').join("") + '</datalist>' +
+    '<datalist id="inst2">' + instaladores.map(v => '<option value="' + esc(v) + '">').join("") + '</datalist>' +
+    '<label class="f"><span>Ubicación</span><input class="inp" id="as-ubicacion" placeholder="Dirección o faena, opcional"></label>' +
+    '<p class="mini" style="margin:0">Los campos que dejes vacíos no se tocan en cada equipo. Todos pasan a Entregado.</p>' +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-asignacion">Asignar al cliente</button>',
+    "Entregar a un cliente");
+}
+
+async function asignarCliente(){
+  const cliente = val("as-cliente");
+  if(!cliente) return avisar("Escribe el nombre del cliente");
+  const us = seleccionEquipos();
+  if(!us.length) return cerrarModal();
+  const entrega = val("as-entrega"), tipo = val("as-tipo"), vendedor = val("as-vendedor"),
+        instalador = val("as-instalador"), ubicacion = val("as-ubicacion");
+  for(const u of us){
+    u.cliente = cliente;
+    u.situacion = "Entregado";
+    if(entrega) u.entrega = entrega;
+    if(tipo && tipo !== "—") u.tipo = tipo;
+    if(vendedor) u.vendedor = vendedor;
+    if(instalador) u.instalador = instalador;
+    if(ubicacion) u.ubicacion = ubicacion;
+  }
+  await persistirLote("unidades", us);
+  registrar("Entrega de " + us.length + " equipos a " + cliente, us.length === 1 ? us[0].serie : "");
+  A.selEq = {};
+  if(REMOTO && !A.sinGuardar) await sincronizar(true);
+  cerrarModal(); pintar();
+  avisar(us.length + (us.length === 1 ? " equipo asignado a " : " equipos asignados a ") + cliente);
+}
+
 /* --- corregir el modelo de un equipo o de un lote completo --- */
 function selectorModelos(id, excluir, sel){
   return '<select class="inp" id="' + id + '">' +
@@ -2734,9 +2809,9 @@ function pintarVaciar(){
     '<button class="btn btn-suave btn-sm" data-accion="vaciar-ninguno">Quitar selección</button></div>' +
     (lista.length ? '<div class="lista">' + lista.map(x => {
       const on = !!ctx.sel[x.m.codigo];
-      return '<div class="fila">' +
+      return '<div class="fila' + (on ? " sel" : "") + '">' +
         '<button class="marca' + (on ? " on" : "") + '" data-vaciarmod="' + esc(x.m.codigo) + '">' +
-        (on ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 13l4 4L19 7"/></svg>' : "") + '</button>' +
+        (on ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M5 13l4 4L19 7"/></svg>' : "") + '</button>' +
         '<div class="t"><b>' + esc(x.m.nombre || x.m.modelo || x.m.codigo) + '</b><span>' +
         esc(x.m.codigo) + (x.cli ? " · " + x.cli + " en clientes" : "") + '</span></div>' +
         '<div style="text-align:right"><b style="color:var(--azul)">' + nf.format(x.n) + '</b>' +
@@ -3008,7 +3083,7 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq]");
   if(!t) return;
   const d = t.dataset;
 
@@ -3038,6 +3113,7 @@ document.addEventListener("click", async ev => {
     c[d.col] = !c[d.col];
     return pintar();
   }
+  if(d.seleq){ A.selEq[d.seleq] = !A.selEq[d.seleq]; return pintar(); }
   if(d.vaciarmod){ ctx.sel[d.vaciarmod] = !ctx.sel[d.vaciarmod]; return pintarVaciar(); }
   if(d.selfila){
     const s = A.rep.sel[A.rep.tipo] = A.rep.sel[A.rep.tipo] || {};
@@ -3184,6 +3260,14 @@ document.addEventListener("click", async ev => {
     cerrarModal(); pintar(); return avisar("Proveedor eliminado");
   }
   if(a === "cargar-catalogo") return cargarCatalogo();
+  if(a === "eq-todos"){
+    A.selEq = {};
+    document.querySelectorAll("[data-seleq]").forEach(b => { A.selEq[b.dataset.seleq] = true; });
+    return pintar();
+  }
+  if(a === "eq-ninguno"){ A.selEq = {}; return pintar(); }
+  if(a === "asignar-cliente") return modalAsignarCliente();
+  if(a === "guardar-asignacion") return asignarCliente();
   if(a === "cambiar-modelo") return modalCambiarModelo(ctx.id);
   if(a === "guardar-cambio-modelo") return guardarCambioModelo();
   if(a === "mover-modelo") return modalMoverModelo();
