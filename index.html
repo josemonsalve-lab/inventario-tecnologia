@@ -90,7 +90,8 @@ header{background:#fff;border-bottom:1px solid var(--linea);position:sticky;top:
 
 /* nav */
 nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--linea);display:flex;z-index:40;padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;padding:9px 2px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--n500);font-size:10px;font-weight:700}
+nav button{flex:1;min-width:0;padding:9px 1px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--n500);font-size:9.5px;font-weight:700}
+nav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 nav button.on{color:var(--azul)}
 
 /* modal */
@@ -153,6 +154,27 @@ details summary::-webkit-details-marker{display:none}
 .tarjeta-login h2{margin:0;font-size:19px;font-weight:900;color:var(--azul)}
 .tarjeta-login .logo{height:40px;width:auto;align-self:flex-start;margin-bottom:2px}
 .tarjeta-login p{margin:0}
+.previa{border:1px solid var(--linea);border-radius:12px;overflow:hidden;background:#fff}
+.previa-banda{background:var(--azul);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:12px}
+.previa-banda img{height:26px;background:#fff;border-radius:6px;padding:4px 6px}
+.previa-banda b{display:block;font-size:14px}
+.previa-banda span{font-size:11px;opacity:.85}
+.previa-res{display:flex;gap:14px;flex-wrap:wrap;background:#f8fbfd;padding:10px 14px;border-bottom:1px solid var(--linea)}
+.previa-res span{display:block;font-size:9px;color:var(--n500);letter-spacing:.03em}
+.previa-res b{font-size:14px;color:var(--azul)}
+.previa-scroll{overflow-x:auto;padding:0 2px}
+.previa-tabla{border-collapse:collapse;width:100%;font-size:11px}
+.previa-tabla th{background:var(--linea);color:var(--azul);text-align:left;padding:5px 6px;white-space:nowrap;font-size:9.5px}
+.previa-tabla td{padding:5px 6px;border-bottom:1px solid var(--linea);white-space:nowrap}
+.previa-tabla tr:nth-child(even) td{background:#fafcfe}
+.previa-tabla.vertical td{white-space:normal}
+.previa-tabla.vertical td:first-child{color:var(--n500);width:45%}
+.previa-tabla.vertical td:last-child{text-align:right}
+.previa-bloque{padding:10px 14px;border-top:1px solid var(--linea)}
+.previa-bloque span{display:block;font-size:9.5px;font-weight:700;color:var(--azul);letter-spacing:.03em}
+.previa-bloque p{margin:3px 0 0;font-size:12.5px}
+.previa-fotos{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 14px}
+.previa-fotos img{width:100%;border-radius:8px;display:block}
 .enlace{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--cielo);color:var(--azul);padding:12px 15px;border-radius:12px;font-weight:700;text-decoration:none;font-size:14px}
 </style>
 </head>
@@ -277,6 +299,7 @@ const MAPA = {
   modelos: { ventaUF: "venta_uf", arriendoUF: "arriendo_uf", proveedorId: "proveedor_id" },
   unidades: { proveedorId: "proveedor_id", facturaId: "factura_id" },   /* lote y creado viajan igual */
   facturas: { proveedorId: "proveedor_id" },
+  mantenimientos: { unidadId: "unidad_id", fechaIngreso: "fecha_ingreso", fechaSalida: "fecha_salida" },
   cotizaciones: { usuarioId: "usuario_id", usuarioEmail: "usuario_email", envioUF: "envio_uf",
     instalacionUF: "instalacion_uf", totalUF: "total_uf" },
   proveedores: {}, movimientos: {}, fotos: {}
@@ -302,6 +325,10 @@ function deFila(tabla, f){
   }
   if(tabla === "unidades") o.costo = f.costo == null ? null : Number(f.costo);
   if(tabla === "facturas") o.monto = f.monto == null ? null : Number(f.monto);
+  if(tabla === "mantenimientos"){
+    o.fotos = f.fotos || [];
+    o.costo = f.costo == null ? null : Number(f.costo);
+  }
   if(tabla === "cotizaciones"){
     o.lineas = f.lineas || []; o.uf = Number(f.uf) || UF_DEF;
     o.fecha = (f.fecha || f.creada || "").slice(0,10);
@@ -466,15 +493,17 @@ async function sincronizar(silencioso){
       A.unidades = (await traerTodo("unidades", "select=*&order=serie")).map(f => deFila("unidades", f));
       A.movs = ((await API.req("GET", "movimientos?select=*&order=ts.desc&limit=200")) || []).map(f => deFila("movimientos", f));
       A.facturas = (await traerTodo("facturas", "select=*&order=fecha.desc")).map(f => deFila("facturas", f));
+      A.mantenimientos = (await traerTodo("mantenimientos", "select=*&order=fecha_ingreso.desc")).map(f => deFila("mantenimientos", f));
       A.dispo = [];
     } else {
       A.dispo = (await API.req("GET", "v_disponibilidad?select=*")) || [];
-      A.unidades = []; A.movs = []; A.facturas = [];
+      A.unidades = []; A.movs = []; A.facturas = []; A.mantenimientos = [];
     }
     A.cotizaciones = (await traerTodo("cotizaciones", "select=*&order=creada.desc")).map(f => deFila("cotizaciones", f));
     A.ultima = Date.now(); A.enLinea = true;
     await Store.set("cache", { modelos: A.modelos, proveedores: A.proveedores, unidades: A.unidades,
-      movs: A.movs, dispo: A.dispo, facturas: A.facturas, cotizaciones: A.cotizaciones, ts: A.ultima, rol: A.rol });
+      movs: A.movs, dispo: A.dispo, facturas: A.facturas, cotizaciones: A.cotizaciones,
+      mantenimientos: A.mantenimientos, ts: A.ultima, rol: A.rol });
   }catch(e){
     A.enLinea = false;
     if(!silencioso) avisar("Sin conexión: mostrando la última copia");
@@ -485,7 +514,7 @@ async function usarCache(){
   if(!c) return false;
   A.modelos = c.modelos || []; A.proveedores = c.proveedores || [];
   A.unidades = c.unidades || []; A.movs = c.movs || []; A.dispo = c.dispo || []; A.facturas = c.facturas || [];
-  A.cotizaciones = c.cotizaciones || [];
+  A.cotizaciones = c.cotizaciones || []; A.mantenimientos = c.mantenimientos || [];
   A.ultima = c.ts; A.enLinea = false;
   return true;
 }
@@ -493,14 +522,14 @@ async function usarCache(){
 /* ------------------------------------------------------------------ estado */
 const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
-  cotizaciones: [], cot: null, selEq: {},
+  cotizaciones: [], cot: null, selEq: {}, mantenimientos: [],
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
-  vista: "stock", q: "", filtro: "Todas", soloBajos: false, sinGuardar: false
+  vista: "stock", q: "", filtro: "Todas", filtroModelo: "", soloBajos: false, sinGuardar: false
 };
 const esAdmin = () => A.rol === "admin";
-const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones" };
+const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones", mantenimientos: "mantenimientos" };
 
 const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -703,13 +732,14 @@ const ICO = {
   ajustes: "M12 15a3 3 0 100-6 3 3 0 000 6zM4 12h2m12 0h2M12 4v2m0 12v2",
   dispo: "M4 19V5m0 14h16M8 16V9m4 7v-4m4 4V7",
   cuenta: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 21a7 7 0 0114 0",
-  cotiza: "M7 3h10v18H7zM10 7h4M10 11h4M10 15h4"
+  cotiza: "M7 3h10v18H7zM10 7h4M10 11h4M10 15h4",
+  taller: "M14.7 6.3a4 4 0 01-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2z"
 };
-const NAV_ADMIN = [["stock","Stock"],["equipos","Equipos"],["proveedores","Proveedores"],["reportes","Reportes"],["ajustes","Ajustes"]];
+const NAV_ADMIN = [["stock","Stock"],["equipos","Equipos"],["taller","Taller"],["cotiza","Cotizar"],["proveedores","Proveedores"],["reportes","Reportes"],["ajustes","Ajustes"]];
 const NAV_VEND  = [["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
 const nav = () => esAdmin() ? NAV_ADMIN : NAV_VEND;
 const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", proveedores:"Proveedores",
-  movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
+  movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
 
 function pintarNav(){
   document.getElementById("nav").innerHTML = nav().map(([id,txt]) => {
@@ -787,8 +817,23 @@ function vistaEquipos(){
   const q = A.q.toLowerCase();
   const chips = '<div class="chips">' + ["Todas", ...SITUACIONES].map(s =>
     '<button class="chip ' + (A.filtro === s ? "on" : "") + '" data-sit="' + esc(s) + '">' + esc(s) + '</button>').join("") + '</div>';
+
+  /* selector de modelo: solo los que tienen equipos, con su cantidad */
+  const conEquipos = A.modelos
+    .map(m => ({ m: m, n: A.unidades.filter(u => u.codigo === m.codigo).length }))
+    .filter(x => x.n > 0)
+    .sort((a, b) => (a.m.codigo || "").localeCompare(b.m.codigo || ""));
+  const sueltos = [...new Set(A.unidades.filter(u => !modelo(u.codigo)).map(u => u.codigo))];
+  const selModelo = '<label class="f" style="margin-bottom:10px"><span>Modelo</span>' +
+    '<select class="inp" id="eq-modelo"><option value="">Todos los modelos (' + nf.format(A.unidades.length) + ')</option>' +
+    conEquipos.map(x => '<option value="' + esc(x.m.codigo) + '"' + (A.filtroModelo === x.m.codigo ? " selected" : "") + '>' +
+      esc(x.m.codigo) + " · " + esc(x.m.nombre || x.m.modelo || "") + "  (" + x.n + ")" + '</option>').join("") +
+    sueltos.map(c => '<option value="' + esc(c) + '"' + (A.filtroModelo === c ? " selected" : "") + '>' +
+      esc(c) + '  (sin ficha)</option>').join("") + '</select></label>';
+
   let us = A.unidades.filter(u => {
     if(A.filtro !== "Todas" && u.situacion !== A.filtro) return false;
+    if(A.filtroModelo && u.codigo !== A.filtroModelo) return false;
     if(!q) return true;
     const p = proveedor(u.proveedorId);
     return [u.serie, u.codigo, u.cliente, u.ubicacion, u.oc, p && p.nombre].join(" ").toLowerCase().includes(q);
@@ -796,7 +841,7 @@ function vistaEquipos(){
   us = us.sort((a,b) => (b.ingreso || "").localeCompare(a.ingreso || ""));
 
   if(!A.unidades.length) return chips + vacio("Sin equipos registrados", "Ingresa los equipos por número de serie eligiendo modelo, proveedor y factura.", "Ingresar equipos", "nueva-unidad");
-  if(!us.length) return chips + vacio("Ningún equipo coincide", "Revisa el filtro de situación o el texto buscado.");
+  if(!us.length) return chips + selModelo + vacio("Ningún equipo coincide", "Revisa los filtros o el texto buscado.");
 
   const enPantalla = us.slice(0, 300);
   const nSel = Object.values(A.selEq).filter(Boolean).length;
@@ -810,7 +855,7 @@ function vistaEquipos(){
     (nSel ? '<button class="btn btn-celeste btn-w" style="margin-bottom:10px" data-accion="asignar-cliente">' +
       'Asignar ' + nf.format(nSel) + (nSel === 1 ? " equipo a un cliente" : " equipos a un cliente") + '</button>' : "");
 
-  return chips + barra + '<div class="lista">' + enPantalla.map(u => {
+  return chips + selModelo + barra + '<div class="lista">' + enPantalla.map(u => {
     const m = modelo(u.codigo), p = proveedor(u.proveedorId), f = fotoEquipo(u);
     const on = !!A.selEq[u.id];
     return '<div class="fila' + (on ? " sel" : "") + '">' +
@@ -1639,6 +1684,161 @@ function generarReporte(){
   return R;
 }
 
+/* --------------------------------------------- vista previa de los documentos */
+function modalPrevia(html, accion, titulo){
+  abrirModal(
+    '<div class="previa">' + html + '</div>' +
+    '<button class="btn btn-azul btn-w" data-accion="' + accion + '">Descargar PDF</button>' +
+    '<button class="btn btn-suave btn-w" data-cerrar="1">Cerrar</button>',
+    titulo || "Vista previa");
+}
+
+function previaTabla(R){
+  const filas = R.csv.slice(0, 60);
+  return '<div class="previa-banda"><img src="logo-rex.png" alt="Rex+"><div>' +
+      '<b>' + esc(R.titulo || "Reporte") + '</b>' +
+      '<span>' + esc(fechaLarga(hoy())) + (R.sub ? "  ·  " + esc(R.sub) : "") + '</span></div></div>' +
+    (R.resumen && R.resumen.length ? '<div class="previa-res">' + R.resumen.map(x =>
+      '<div><span>' + esc(String(x[0]).toUpperCase()) + '</span><b>' + esc(x[1]) + '</b></div>').join("") + '</div>' : "") +
+    '<div class="previa-scroll"><table class="previa-tabla"><tr>' +
+      R.cab.map(c => '<th>' + esc(String(c).replace(/_/g, " ").toUpperCase()) + '</th>').join("") + '</tr>' +
+      filas.map(f => '<tr>' + f.map(v => '<td>' + esc(v == null ? "" : v) + '</td>').join("") + '</tr>').join("") +
+    '</table></div>' +
+    (R.csv.length > filas.length ? '<p class="mini" style="margin:8px 0 0">En pantalla se muestran ' + filas.length +
+      ' de ' + nf.format(R.csv.length) + ' filas. El PDF las lleva todas.</p>' : "") +
+    (R.nota ? '<p class="mini" style="margin:8px 0 0">' + esc(R.nota) + '</p>' : "");
+}
+
+/* --------------------------------------------- informe de una reparación */
+function datosReparacion(m){
+  const u = A.unidades.find(x => x.id === m.unidadId) || A.unidades.find(x => x.serie === m.serie);
+  const mod = modelo(m.codigo || (u && u.codigo));
+  const d = diasTaller(m);
+  return { m: m, u: u, mod: mod, dias: d,
+    filas: [
+      ["Número de serie", m.serie],
+      ["Equipo", mod ? (mod.nombre || mod.modelo || m.codigo) : (m.codigo || "Sin especificar")],
+      ["Cliente", (u && u.cliente) || m.cliente || "—"],
+      ["Procedencia", m.unidadId ? "Equipo del inventario Rex+" : "Equipo externo"],
+      ["Ingreso al taller", m.fechaIngreso ? fechaLarga(m.fechaIngreso) : "—"],
+      ["Salida", m.fechaSalida ? fechaLarga(m.fechaSalida) : "en taller"],
+      ["Días en taller", d === null ? "—" : String(d)],
+      ["Técnico", m.tecnico || "—"],
+      ["Estado", m.estado],
+      ["Costo de la reparación", m.costo == null ? "—" : clp(m.costo)]
+    ] };
+}
+
+function previaReparacion(m){
+  const R = datosReparacion(m);
+  const fotos = (m.fotos || []).map(id => A.fotos[id]).filter(Boolean);
+  const bloque = (t, v) => v ? '<div class="previa-bloque"><span>' + esc(t) + '</span><p>' + esc(v) + '</p></div>' : "";
+  return '<div class="previa-banda"><img src="logo-rex.png" alt="Rex+"><div>' +
+      '<b>Informe de reparación</b><span>N° ' + esc(folioMant(m)) + '  ·  ' + esc(fechaLarga(hoy())) + '</span></div></div>' +
+    '<table class="previa-tabla vertical">' + R.filas.map(f =>
+      '<tr><td>' + esc(f[0]) + '</td><td><b>' + esc(f[1]) + '</b></td></tr>').join("") + '</table>' +
+    bloque("Motivo del ingreso", m.motivo) +
+    bloque("Diagnóstico", m.diagnostico) +
+    bloque("Solución aplicada", m.solucion) +
+    bloque("Notas", m.notas) +
+    (fotos.length ? '<div class="previa-fotos">' + fotos.slice(0, 6).map(f =>
+      '<img src="' + f + '" alt="">').join("") + '</div>' : "");
+}
+
+const folioMant = m => (m.id ? m.id.replace(/-/g, "").slice(0, 6).toUpperCase() : "—");
+
+async function reparacionPDF(){
+  const m = A.mantenimientos.find(x => x.id === ctx.id);
+  if(!m) return;
+  let jsPDF;
+  try{ jsPDF = await cargarJsPDF(); }catch(e){ return avisar(e.message); }
+  avisar("Generando el PDF…");
+  const R = datosReparacion(m);
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = 210, H = 297, M = 16;
+  await cabeceraRex(doc, W, "Informe de reparación",
+    "N° " + folioMant(m) + "  ·  " + fechaLarga(hoy()), "");
+
+  let y = 42;
+  doc.setDrawColor(...PDF_LINEA);
+  for(const [k, v] of R.filas){
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...PDF_GRIS);
+    doc.text(String(k), M, y);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...PDF_TEXTO);
+    doc.text(String(v), W - M, y, { align: "right" });
+    doc.line(M, y + 2.5, W - M, y + 2.5);
+    y += 8;
+  }
+
+  const bloque = (t, v) => {
+    if(!v) return;
+    y += 4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...PDF_AZUL);
+    doc.text(String(t).toUpperCase(), M, y);
+    y += 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...PDF_TEXTO);
+    for(const l of doc.splitTextToSize(String(v), W - 2 * M)){ doc.text(l, M, y); y += 5; }
+  };
+  bloque("Motivo del ingreso", m.motivo);
+  bloque("Diagnóstico", m.diagnostico);
+  bloque("Solución aplicada", m.solucion);
+  bloque("Notas", m.notas);
+
+  const fotos = (m.fotos || []).map(id => A.fotos[id]).filter(Boolean).slice(0, 4);
+  if(fotos.length){
+    y += 6;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...PDF_AZUL);
+    doc.text("REGISTRO FOTOGRÁFICO", M, y);
+    y += 5;
+    const an = (W - 2 * M - 6) / 2, al = an * 0.72;
+    fotos.forEach((f, i) => {
+      const cx = M + (i % 2) * (an + 6), cy = y + Math.floor(i / 2) * (al + 6);
+      try{ doc.addImage(f, "JPEG", cx, cy, an, al); }catch(e){}
+    });
+    y += Math.ceil(fotos.length / 2) * (al + 6);
+  }
+
+  pieRex(doc, W, H, "Rex+  ·  Mantenimiento de equipos",
+    "Informe N° " + folioMant(m) + "  ·  " + esc(m.serie));
+  const archivo = "reparacion-" + folioMant(m) + "-" + m.serie.replace(/[^a-zA-Z0-9]+/g, "-") + ".pdf";
+  try{ doc.save(archivo); avisar("PDF descargado"); }
+  catch(e){
+    try{ window.open(doc.output("bloburl"), "_blank"); }
+    catch(e2){ avisar("No se pudo generar el PDF"); }
+  }
+}
+
+/* --------------------------------------------- informe del taller completo */
+function docDelTaller(){
+  const q = A.q.toLowerCase();
+  const f = A.filtro === "Todas" ? "En taller" : A.filtro;
+  const ms = A.mantenimientos.filter(m => {
+    if(f === "En taller" && !enTaller(m)) return false;
+    if(f !== "En taller" && f !== "Todos" && m.estado !== f) return false;
+    if(!q) return true;
+    return [m.serie, m.codigo, m.motivo, m.tecnico, m.diagnostico].filter(Boolean).join(" ").toLowerCase().includes(q);
+  }).sort((a, b) => String(b.fechaIngreso || "").localeCompare(String(a.fechaIngreso || "")));
+
+  const costo = ms.reduce((a, m) => a + (Number(m.costo) || 0), 0);
+  const dias = ms.map(diasTaller).filter(d => d !== null);
+  return {
+    titulo: "Reporte · Mantenimiento", etiqueta: "Mantenimiento",
+    sub: f + (A.q ? '   ·   Buscado: "' + A.q + '"' : ""),
+    resumen: [["Reparaciones", nf.format(ms.length)],
+      ["Días promedio", dias.length ? (dias.reduce((a, b) => a + b, 0) / dias.length).toFixed(1) : "—"],
+      ["Costo total", costo ? clp(costo) : "—"]],
+    cab: ["serie", "codigo", "cliente", "motivo", "estado", "tecnico", "ingreso", "salida", "dias", "costo_clp", "diagnostico", "solucion"],
+    csv: ms.map(m => {
+      const u = A.unidades.find(x => x.id === m.unidadId) || A.unidades.find(x => x.serie === m.serie);
+      return [m.serie, m.codigo || "", (u && u.cliente) || m.cliente || "", m.motivo || "", m.estado,
+        m.tecnico || "", m.fechaIngreso || "", m.fechaSalida || "",
+        diasTaller(m) === null ? "" : diasTaller(m), m.costo == null ? "" : m.costo,
+        m.diagnostico || "", m.solucion || ""];
+    }),
+    nota: "", nombre: "reporte-taller-" + hoy()
+  };
+}
+
 /* --------------------------------------------- documentos PDF con marca Rex+ */
 const PDF_AZUL = [10, 92, 133], PDF_CELESTE = [0, 186, 255], PDF_LIMA = [190, 218, 105];
 const PDF_GRIS = [104, 128, 141], PDF_LINEA = [226, 236, 242], PDF_TEXTO = [44, 62, 74];
@@ -1684,10 +1884,19 @@ async function reportePDF(){
   }
 }
 
-async function reportePDFInterno(){
+function docDelReporte(){
   const Rfull = generarReporte();
   const D = datosExport(Rfull);
-  const R = { cab: D.cab, csv: D.filas, resumen: Rfull.resumen, nota: Rfull.nota, nombre: Rfull.nombre };
+  const nombreRep = (REPORTES.find(x => x[0] === A.rep.tipo) || ["", "Reporte"])[1];
+  return { titulo: "Reporte · " + nombreRep, etiqueta: nombreRep,
+    sub: [textoPeriodo(), A.q ? 'Buscado: "' + A.q + '"' : "",
+          haySeleccion() ? "Selección de " + D.filas.length + " filas" : ""].filter(Boolean).join("   ·   "),
+    cab: D.cab, csv: D.filas, resumen: Rfull.resumen, nota: Rfull.nota,
+    nombre: Rfull.nombre + "-" + hoy() };
+}
+
+async function reportePDFInterno(){
+  const R = ctx.doc || docDelReporte();
   if(!R.csv.length) return avisar(haySeleccion() ? "No hay filas seleccionadas" : "Este reporte no tiene datos");
   let jsPDF;
   try{ jsPDF = await cargarJsPDF(); }catch(e){ return avisar(e.message); }
@@ -1697,10 +1906,8 @@ async function reportePDFInterno(){
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: ancho ? "landscape" : "portrait" });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
   const M = 16, util = W - 2 * M;
-  const nombreRep = (REPORTES.find(x => x[0] === A.rep.tipo) || ["", "Reporte"])[1];
-  await cabeceraRex(doc, W, "Reporte · " + nombreRep, fechaLarga(hoy()),
-    [textoPeriodo(), A.q ? 'Buscado: "' + A.q + '"' : "",
-     haySeleccion() ? "Selección de " + R.csv.length + " filas" : ""].filter(Boolean).join("   ·   "));
+  const nombreRep = R.etiqueta || "Reporte";
+  await cabeceraRex(doc, W, R.titulo || "Reporte", fechaLarga(hoy()), R.sub || "");
 
   /* resumen */
   let y = 42;
@@ -1798,7 +2005,7 @@ async function reportePDFInterno(){
   }
 
   pieRex(doc, W, H, "Rex+  ·  " + nombreRep, "Página " + doc.getNumberOfPages());
-  const archivo = "reporte-" + A.rep.tipo + "-" + hoy() + ".pdf";
+  const archivo = (R.nombre || "documento") + ".pdf";
   try{ doc.save(archivo); avisar("PDF descargado"); }
   catch(e){
     try{ window.open(doc.output("bloburl"), "_blank"); }
@@ -1882,7 +2089,7 @@ function vistaReportes(){
     }).join("") + '</div>'
       : '<p class="mini">Sin datos para este reporte con los filtros actuales.</p>') +
 
-    (R.filas.length ? '<button class="btn btn-azul btn-w" style="margin-top:14px" data-accion="pdf-reporte">Descargar reporte en PDF</button>' +
+    (R.filas.length ? '<button class="btn btn-azul btn-w" style="margin-top:14px" data-accion="ver-reporte">Ver reporte y descargar PDF</button>' +
       '<button class="btn btn-linea btn-w" style="margin-top:8px" data-accion="exportar-reporte">Exportar a CSV</button>' : "");
 }
 
@@ -1915,6 +2122,265 @@ function descargarCSV(nombre, cab, filas){
   }
 }
 
+/* ------------------------------------------------------ taller / mantenimiento */
+const EST_TALLER = ["Ingresado", "En reparación", "Reparado", "Irreparable", "Devuelto"];
+const CLASE_TALLER = { "Ingresado": "pt-rev", "En reparación": "pt-rev", "Reparado": "pt-disp",
+  "Irreparable": "pt-baja", "Devuelto": "pt-ent" };
+const enTaller = m => m.estado === "Ingresado" || m.estado === "En reparación";
+
+function diasTaller(m){
+  const ini = String(m.fechaIngreso || "").slice(0, 10);
+  if(!ini) return null;
+  const fin = String(m.fechaSalida || "").slice(0, 10) || hoy();
+  return Math.max(0, Math.round((new Date(fin + "T12:00:00") - new Date(ini + "T12:00:00")) / 86400000));
+}
+
+function vistaTaller(){
+  const q = A.q.toLowerCase();
+  const todos = A.mantenimientos.slice().sort((a, b) =>
+    String(b.fechaIngreso || "").localeCompare(String(a.fechaIngreso || "")));
+  const chips = '<div class="chips">' + ["En taller", ...EST_TALLER, "Todos"].map(e =>
+    '<button class="chip ' + (A.filtro === e ? "on" : "") + '" data-sit="' + esc(e) + '">' + e + '</button>').join("") + '</div>';
+  const f = A.filtro === "Todas" ? "En taller" : A.filtro;
+  let ms = todos.filter(m => {
+    if(f === "En taller" && !enTaller(m)) return false;
+    if(f !== "En taller" && f !== "Todos" && m.estado !== f) return false;
+    if(!q) return true;
+    return [m.serie, m.codigo, m.motivo, m.tecnico, m.diagnostico].filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+
+  const abiertos = todos.filter(enTaller).length;
+  const resumen = '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+    '<tr><td>Equipos en el taller</td><td>' + nf.format(abiertos) + '</td></tr>' +
+    '<tr><td>Reparados este mes</td><td>' + nf.format(todos.filter(m => m.estado === "Reparado" &&
+      String(m.fechaSalida || "").slice(0, 7) === hoy().slice(0, 7)).length) + '</td></tr>' +
+    '<tr><td>Histórico</td><td>' + nf.format(todos.length) + '</td></tr></table></div>';
+
+  if(!todos.length) return chips + resumen +
+    vacio("El taller está vacío", "Ingresa un equipo por su número de serie para registrar la reparación.",
+      "Ingresar equipo", "nuevo-taller");
+  if(!ms.length) return chips + resumen + '<p class="mini">Nada con ese filtro.</p>';
+
+  const pie = '<button class="btn btn-azul btn-w" style="margin-top:14px" data-accion="ver-taller">' +
+    'Ver informe del taller y descargar PDF</button>';
+  return chips + resumen + '<div class="lista">' + ms.slice(0, 200).map(m => {
+    const foto = (m.fotos || []).map(id => A.fotos[id]).filter(Boolean)[0];
+    const u = A.unidades.find(x => x.id === m.unidadId) || A.unidades.find(x => x.serie === m.serie);
+    const mod = modelo(m.codigo || (u && u.codigo));
+    const d = diasTaller(m);
+    return '<button class="fila" data-mant="' + m.id + '">' +
+      '<span class="mini-foto">' + (foto ? '<img src="' + foto + '" alt="">' : ICONO_EQUIPO) + '</span>' +
+      '<div class="t"><b>' + esc(m.serie) + '</b>' +
+      '<span>' + (mod ? esc(mod.nombre || mod.modelo || m.codigo) : esc(m.codigo || "Sin modelo")) +
+        (!m.unidadId ? " · externo" : "") + (m.cliente ? " · " + esc(m.cliente) : "") +
+        (m.motivo ? " · " + esc(m.motivo) : "") + '</span>' +
+      '<span>' + (m.fechaIngreso ? "ingresó " + fechaCorta(m.fechaIngreso) : "") +
+        (d !== null ? " · " + d + (d === 1 ? " día" : " días") + (enTaller(m) ? " en taller" : "") : "") +
+        (m.tecnico ? " · " + esc(m.tecnico) : "") + '</span></div>' +
+      '<span class="pt ' + (CLASE_TALLER[m.estado] || "pt-ent") + '">' + esc(m.estado) + '</span></button>';
+  }).join("") + '</div>' + pie;
+}
+
+/* --- ingreso al taller --- */
+function modalNuevoTaller(serie){
+  ctx = { tipo: "nuevo-taller", fotos: [], serie: serie || "",
+          motivo: "", ingreso: hoy(), tecnico: "", notas: "", codigo: "", cliente: "" };
+  pintarNuevoTaller();
+}
+
+function pintarNuevoTaller(){
+  const u = ctx.serie ? A.unidades.find(x => x.serie.toLowerCase() === ctx.serie.toLowerCase()) : null;
+  const m = u ? modelo(u.codigo) : null;
+  const tecnicos = [...new Set(A.mantenimientos.map(x => x.tecnico).filter(Boolean))].sort();
+  abrirModal(
+    '<label class="f"><span>Número de serie</span>' +
+    '<input class="inp" id="t-serie" value="' + esc(ctx.serie) + '" placeholder="Escanea o escribe la serie" autocomplete="off"></label>' +
+    (ctx.serie
+      ? (u ? '<div class="fila"><span class="mini-foto">' +
+            ((m && fotosDe(m)[0]) ? '<img src="' + fotosDe(m)[0] + '" alt="">' : ICONO_EQUIPO) + '</span>' +
+            '<div class="t"><b>' + esc(m ? (m.nombre || m.modelo || u.codigo) : u.codigo) + '</b><span>' +
+            esc(u.codigo) + " · " + esc(u.situacion) + (u.cliente ? " · " + esc(u.cliente) : "") + '</span></div></div>'
+          : '<div class="fila" style="display:block;background:#fff4e0"><div class="t">' +
+            '<b style="color:#a76a00">Equipo externo</b><span style="color:#a76a00">Esa serie no está en el ' +
+            'inventario. Se puede atender igual; el registro queda sin vínculo con el stock.</span></div></div>' +
+            '<div class="f2"><label class="f"><span>Modelo (opcional)</span>' +
+            '<select class="inp" id="t-codigo"><option value="">Sin especificar</option>' +
+            A.modelos.slice().sort((x, y) => (x.codigo || "").localeCompare(y.codigo || "")).map(x =>
+              '<option value="' + esc(x.codigo) + '"' + (x.codigo === ctx.codigo ? " selected" : "") + '>' +
+              esc(x.codigo) + '</option>').join("") + '</select></label>' +
+            '<label class="f"><span>Cliente o dueño</span><input class="inp" id="t-cliente" value="' +
+            esc(ctx.cliente || "") + '" placeholder="De quién es el equipo"></label></div>')
+      : '<p class="mini" style="margin:0">Escribe la serie y pulsa Buscar. Si no está en el inventario, igual puedes atenderla.</p>') +
+    '<button class="btn btn-linea btn-w" data-accion="buscar-serie-taller">Buscar equipo</button>' +
+
+    '<label class="f"><span>Motivo del ingreso</span><input class="inp" id="t-motivo" value="' + esc(ctx.motivo || "") +
+      '" placeholder="No lee huella, pantalla rota, no enciende"></label>' +
+    '<div class="f2"><label class="f"><span>Fecha de ingreso</span><input class="inp" id="t-ingreso" type="date" value="' +
+      esc(ctx.ingreso || hoy()) + '"></label>' +
+    '<label class="f"><span>Técnico</span><input class="inp" id="t-tecnico" list="tecnicos" value="' + esc(ctx.tecnico || "") + '"></label></div>' +
+    '<datalist id="tecnicos">' + tecnicos.map(t => '<option value="' + esc(t) + '">').join("") + '</datalist>' +
+    '<label class="f"><span>Notas</span><textarea class="inp" id="t-notas" rows="2" ' +
+      'placeholder="Accesorios que vienen con el equipo, estado en que llega">' + esc(ctx.notas || "") + '</textarea></label>' +
+
+    '<div><span style="display:block;font-size:13px;font-weight:700;color:var(--azul);margin-bottom:6px">Fotos del equipo</span>' +
+    '<input type="file" accept="image/*" id="file" hidden>' + galeriaTaller() + '</div>' +
+
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-nuevo-taller"' + (ctx.serie ? "" : " disabled") + '>' +
+      (!ctx.serie ? "Primero busca la serie" : (u ? "Ingresar al taller" : "Ingresar equipo externo")) + '</button>',
+    "Ingresar equipo al taller");
+  const s = document.getElementById("t-serie");
+  if(s && !ctx.serie) s.focus();
+  if(s) s.addEventListener("keydown", e => {
+    if(e.key !== "Enter") return;
+    e.preventDefault();
+    leerNuevoTaller(); ctx.serie = s.value.trim(); pintarNuevoTaller();
+  });
+}
+
+function galeriaTaller(){
+  return '<div class="tiras">' + ctx.fotos.map((f, i) =>
+      '<div class="tira"><img src="' + f.data + '" alt=""><span class="x" data-quitar-foto="' + i + '">×</span></div>').join("") +
+    (ctx.fotos.length < 6 ? '<button class="tira mas" data-accion="elegir-foto">+</button>' : "") + '</div>';
+}
+
+function leerNuevoTaller(){
+  ["motivo", "ingreso", "tecnico", "notas", "codigo", "cliente"].forEach(k => {
+    const e = document.getElementById("t-" + k);
+    if(e) ctx[k] = e.value;
+  });
+}
+
+async function guardarNuevoTaller(){
+  leerNuevoTaller();
+  const s = document.getElementById("t-serie");
+  const serie = s ? s.value.trim() : ctx.serie;
+  if(!serie) return avisar("Falta el número de serie");
+  const u = A.unidades.find(x => x.serie.toLowerCase() === serie.toLowerCase());
+  const m = { id: uuid(), unidadId: u ? u.id : "", serie: serie,
+    codigo: u ? u.codigo : (ctx.codigo || ""),
+    cliente: u ? (u.cliente || "") : (ctx.cliente || ""),
+    motivo: ctx.motivo || "", estado: "Ingresado", tecnico: ctx.tecnico || "",
+    diagnostico: "", solucion: "", costo: null,
+    fechaIngreso: ctx.ingreso || hoy(), fechaSalida: "", notas: ctx.notas || "",
+    fotos: ctx.fotos.map(f => f.id) };
+  for(const f of ctx.fotos) await guardarFoto(f.id, f.data);
+  A.mantenimientos.unshift(m);
+  await persistir("mantenimientos", m);
+
+  if(u){
+    u.situacion = "En revisión";                   // sale del stock disponible
+    await persistir("unidades", u);
+  }
+  registrar("Ingreso al taller: " + (m.motivo || "sin motivo") + (u ? "" : " (equipo externo)"), serie);
+  if(REMOTO && !A.sinGuardar) await sincronizar(true);
+  cerrarModal(); pintar();
+  avisar(serie + (u ? " ingresó al taller" : " ingresó al taller como equipo externo"));
+}
+
+/* --- ficha de la reparación --- */
+async function modalTaller(id){
+  const m = A.mantenimientos.find(x => x.id === id);
+  if(!m) return;
+  for(const fid of (m.fotos || [])) await cargarFoto(fid);
+  ctx = { tipo: "taller", id: id,
+    fotos: (m.fotos || []).map(fid => ({ id: fid, data: A.fotos[fid] })).filter(x => x.data),
+    originales: (m.fotos || []).slice() };
+  pintarTaller();
+}
+
+function pintarTaller(){
+  const m = A.mantenimientos.find(x => x.id === ctx.id);
+  const u = A.unidades.find(x => x.id === m.unidadId) || A.unidades.find(x => x.serie === m.serie);
+  const mod = modelo(m.codigo || (u && u.codigo));
+  const d = diasTaller(m);
+  const tecnicos = [...new Set(A.mantenimientos.map(x => x.tecnico).filter(Boolean))].sort();
+  abrirModal(
+    '<div class="fila" style="background:var(--fondo)"><span class="mini-foto">' +
+      ((mod && fotosDe(mod)[0]) ? '<img src="' + fotosDe(mod)[0] + '" alt="">' : ICONO_EQUIPO) + '</span>' +
+      '<div class="t"><b>' + esc(m.serie) + '</b><span>' +
+      (mod ? esc(mod.nombre || mod.modelo || m.codigo) : esc(m.codigo || "")) +
+      (m.fechaIngreso ? " · ingresó " + fechaCorta(m.fechaIngreso) : "") +
+      (d !== null ? " · " + d + (d === 1 ? " día" : " días") : "") + '</span>' +
+      ((u && u.cliente) || m.cliente ? '<span>Cliente: ' + esc((u && u.cliente) || m.cliente) + '</span>' : "") +
+      (u ? "" : '<span style="color:#a76a00">Equipo externo, no está en el inventario</span>') + '</div>' +
+      '<span class="pt ' + (CLASE_TALLER[m.estado] || "pt-ent") + '">' + esc(m.estado) + '</span></div>' +
+
+    '<div><span style="display:block;font-size:13px;font-weight:700;color:var(--azul);margin-bottom:6px">Fotos</span>' +
+    '<input type="file" accept="image/*" id="file" hidden>' + galeriaTaller() + '</div>' +
+
+    '<label class="f"><span>Motivo del ingreso</span><input class="inp" id="t-motivo" value="' + esc(m.motivo || "") + '"></label>' +
+    '<div class="f2"><label class="f"><span>Estado</span><select class="inp" id="t-estado">' +
+      opciones(EST_TALLER, m.estado) + '</select></label>' +
+    '<label class="f"><span>Técnico</span><input class="inp" id="t-tecnico" list="tecnicos2" value="' + esc(m.tecnico || "") + '"></label></div>' +
+    '<datalist id="tecnicos2">' + tecnicos.map(t => '<option value="' + esc(t) + '">').join("") + '</datalist>' +
+    '<label class="f"><span>Diagnóstico</span><textarea class="inp" id="t-diagnostico" rows="2">' + esc(m.diagnostico || "") + '</textarea></label>' +
+    '<label class="f"><span>Solución aplicada</span><textarea class="inp" id="t-solucion" rows="2">' + esc(m.solucion || "") + '</textarea></label>' +
+    '<div class="f2"><label class="f"><span>Costo de la reparación (CLP)</span>' +
+      '<input class="inp" id="t-costo" type="number" min="0" value="' + esc(m.costo == null ? "" : m.costo) + '"></label>' +
+    '<label class="f"><span>Fecha de salida</span><input class="inp" id="t-salida" type="date" value="' + esc(String(m.fechaSalida || "").slice(0,10)) + '"></label></div>' +
+    '<label class="f"><span>Notas</span><textarea class="inp" id="t-notas" rows="2">' + esc(m.notas || "") + '</textarea></label>' +
+
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-taller">Guardar</button>' +
+    '<button class="btn btn-azul btn-w" data-accion="ver-reparacion">Ver informe de la reparación</button>' +
+    (enTaller(m) ? '<div class="sec">Cerrar la reparación</div>' +
+      '<button class="btn btn-linea btn-w" data-accion="cerrar-reparado">Reparado' +
+        (u ? " · vuelve a stock disponible" : "") + '</button>' +
+      ((u && u.cliente) || (!u && m.cliente) ? '<button class="btn btn-linea btn-w" data-accion="cerrar-devuelto">' +
+        'Devuelto al cliente</button>' : "") +
+      '<button class="btn btn-rojo btn-w" data-accion="cerrar-baja">Irreparable' +
+        (u ? " · dar de baja el equipo" : "") + '</button>' : "") +
+    '<button class="btn btn-suave btn-w" data-accion="borrar-taller">Eliminar este registro</button>',
+    "Reparación");
+}
+
+function leerTaller(){
+  const m = A.mantenimientos.find(x => x.id === ctx.id);
+  const v = id => { const e = document.getElementById(id); return e ? e.value : null; };
+  if(v("t-motivo") !== null) m.motivo = v("t-motivo");
+  if(v("t-estado") !== null) m.estado = v("t-estado");
+  if(v("t-tecnico") !== null) m.tecnico = v("t-tecnico");
+  if(v("t-diagnostico") !== null) m.diagnostico = v("t-diagnostico");
+  if(v("t-solucion") !== null) m.solucion = v("t-solucion");
+  if(v("t-costo") !== null) m.costo = v("t-costo") === "" ? null : Number(v("t-costo"));
+  if(v("t-salida") !== null) m.fechaSalida = v("t-salida");
+  if(v("t-notas") !== null) m.notas = v("t-notas");
+  return m;
+}
+
+async function guardarTaller(cierre){
+  const m = leerTaller();
+  const u = A.unidades.find(x => x.id === m.unidadId) || A.unidades.find(x => x.serie === m.serie);
+  if(cierre){
+    m.estado = cierre === "baja" ? "Irreparable" : (cierre === "devuelto" ? "Devuelto" : "Reparado");
+    if(!m.fechaSalida) m.fechaSalida = hoy();
+  }
+  for(const fid of ctx.originales){
+    if(!ctx.fotos.some(f => f.id === fid)) await guardarFoto(fid, null);
+  }
+  for(const f of ctx.fotos) if(A.fotos[f.id] !== f.data) await guardarFoto(f.id, f.data);
+  m.fotos = ctx.fotos.map(f => f.id);
+  await persistir("mantenimientos", m);
+
+  if(cierre && u){
+    u.situacion = cierre === "baja" ? "Baja" : (cierre === "devuelto" ? "Entregado" : "Disponible");
+    if(cierre === "reparado"){ u.cliente = ""; u.entrega = ""; }
+    await persistir("unidades", u);
+    registrar("Sale del taller: " + m.estado + (m.solucion ? " · " + m.solucion : ""), m.serie);
+  }
+  if(REMOTO && !A.sinGuardar) await sincronizar(true);
+  cerrarModal(); pintar();
+  avisar(cierre ? m.serie + ": " + m.estado : "Reparación guardada");
+}
+
+async function borrarTaller(){
+  const m = A.mantenimientos.find(x => x.id === ctx.id);
+  for(const fid of (m.fotos || [])) await guardarFoto(fid, null);
+  A.mantenimientos = A.mantenimientos.filter(x => x.id !== ctx.id);
+  await borrarFila("mantenimientos", ctx.id);
+  cerrarModal(); pintar();
+  avisar("Registro eliminado");
+}
+
 function pintar(){
   if(!nav().some(n => n[0] === A.vista) && A.vista !== "cotiza") A.vista = "stock";
   const nombreRep = (REPORTES.find(x => x[0] === A.rep.tipo) || ["", ""])[1];
@@ -1925,7 +2391,7 @@ function pintar(){
   document.getElementById("fab").hidden = !esAdmin() || ["movs","ajustes","cotiza","reportes"].indexOf(A.vista) >= 0;
   const v = { stock: vistaStock, equipos: vistaEquipos, proveedores: vistaProveedores, movs: vistaMovs,
     ajustes: vistaAjustes, dispo: vistaDisponibilidad, cuenta: vistaCuenta, cotiza: vistaCotizador,
-    reportes: vistaReportes }[A.vista];
+    reportes: vistaReportes, taller: vistaTaller }[A.vista];
   document.getElementById("vista").innerHTML =
     (!REMOTO && location.protocol.indexOf("http") === 0
       ? '<div class="aviso" style="margin-top:14px;background:#fff4e0;color:#a76a00">' +
@@ -2169,6 +2635,7 @@ async function modalUnidad(id, codigoPre){
       b.push(s === "Baja" ? ["disponible", "Reactivar equipo", "linea"] : ["baja", "Dar de baja", "suave"]);
       return '<div class="sec">Correcciones</div>' +
         '<button class="btn btn-linea btn-w" data-accion="cambiar-modelo">Cambiar el modelo de este equipo</button>' +
+        '<button class="btn btn-linea btn-w" data-accion="al-taller">Enviar al taller</button>' +
         '<div class="sec">Cambiar situación</div>' + b.map(x =>
         '<button class="btn btn-' + x[2] + ' btn-w" data-accion="sit-' + x[0] + '">' + x[1] + '</button>').join("") +
         '<p class="mini" style="margin:0">Al escribir un cliente o una fecha de entrega, el equipo pasa a Entregado al guardar.</p>';
@@ -3083,21 +3550,26 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant]");
   if(!t) return;
   const d = t.dataset;
 
   if(d.velo && ev.target === t) return cerrarModal();
   if(d.cerrar) return cerrarModal();
 
-  if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.soloBajos = false; A.q = ""; document.getElementById("q").value = ""; return pintar(); }
+  if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.soloBajos = false; A.q = ""; document.getElementById("q").value = ""; return pintar(); }
   if(d.cat){ A.filtro = d.cat; return pintar(); }
   if(d.sit){ A.filtro = d.sit; return pintar(); }
   if(d.bajos){ A.soloBajos = !A.soloBajos; return pintar(); }
 
   if(d.modelo) return modalFicha(d.modelo);
   if(d.fotoIdx != null){ ctx.idx = Number(d.fotoIdx); return pintarFicha(); }
-  if(d.quitarFoto != null){ ctx.fotos.splice(Number(d.quitarFoto), 1); return pintarFormModelo(); }
+  if(d.quitarFoto != null){
+    ctx.fotos.splice(Number(d.quitarFoto), 1);
+    if(ctx.tipo === "nuevo-taller"){ leerNuevoTaller(); return pintarNuevoTaller(); }
+    if(ctx.tipo === "taller"){ leerTaller(); return pintarTaller(); }
+    return pintarFormModelo();
+  }
   if(d.unidad) return modalUnidad(d.unidad);
   if(d.proveedor) return modalProveedor(d.proveedor);
   if(d.factura) return modalFactura(d.factura);
@@ -3113,6 +3585,7 @@ document.addEventListener("click", async ev => {
     c[d.col] = !c[d.col];
     return pintar();
   }
+  if(d.mant) return modalTaller(d.mant);
   if(d.seleq){ A.selEq[d.seleq] = !A.selEq[d.seleq]; return pintar(); }
   if(d.vaciarmod){ ctx.sel[d.vaciarmod] = !ctx.sel[d.vaciarmod]; return pintarVaciar(); }
   if(d.selfila){
@@ -3125,6 +3598,7 @@ document.addEventListener("click", async ev => {
   if(d.abrir === "nuevo-modelo") return modalModelo(null);
   if(d.abrir === "nueva-unidad") return modalIngreso(null);
   if(d.abrir === "nuevo-proveedor") return modalProveedor(null);
+  if(d.abrir === "nuevo-taller") return modalNuevoTaller("");
 
   const a = d.accion;
   if(a === "entrar") return entrar();
@@ -3171,6 +3645,12 @@ document.addEventListener("click", async ev => {
     A.sinGuardar = false; A.ultimoError = "";
     await sincronizar(); pintar();
     return avisar(A.enLinea ? "Datos recargados del servidor" : "Sigue sin conexión");
+  }
+  if(a === "ver-reporte"){
+    const doc = docDelReporte();
+    if(!doc.csv.length) return avisar(haySeleccion() ? "No hay filas seleccionadas" : "Este reporte no tiene datos");
+    ctx = { tipo: "previa", doc: doc };
+    return modalPrevia(previaTabla(doc), "pdf-reporte", doc.titulo);
   }
   if(a === "pdf-reporte") return reportePDF();
   if(a === "limpiar-filtros"){
@@ -3268,8 +3748,40 @@ document.addEventListener("click", async ev => {
   if(a === "eq-ninguno"){ A.selEq = {}; return pintar(); }
   if(a === "asignar-cliente") return modalAsignarCliente();
   if(a === "guardar-asignacion") return asignarCliente();
+  if(a === "buscar-serie-taller"){
+    leerNuevoTaller();
+    const e = document.getElementById("t-serie");
+    ctx.serie = e ? e.value.trim() : "";
+    return pintarNuevoTaller();
+  }
+  if(a === "guardar-nuevo-taller") return guardarNuevoTaller();
+  if(a === "ver-taller"){
+    const doc = docDelTaller();
+    if(!doc.csv.length) return avisar("No hay reparaciones con ese filtro");
+    ctx = { tipo: "previa", doc: doc };
+    return modalPrevia(previaTabla(doc), "pdf-reporte", "Informe del taller");
+  }
+  if(a === "ver-reparacion"){
+    const m = leerTaller();
+    await persistir("mantenimientos", m);
+    const id = m.id;
+    modalPrevia(previaReparacion(m), "pdf-reparacion", "Informe de reparación");
+    ctx = { tipo: "previa", id: id };
+    return;
+  }
+  if(a === "pdf-reparacion") return reparacionPDF();
+  if(a === "guardar-taller") return guardarTaller("");
+  if(a === "cerrar-reparado") return guardarTaller("reparado");
+  if(a === "cerrar-devuelto") return guardarTaller("devuelto");
+  if(a === "cerrar-baja") return guardarTaller("baja");
+  if(a === "borrar-taller") return borrarTaller();
   if(a === "cambiar-modelo") return modalCambiarModelo(ctx.id);
   if(a === "guardar-cambio-modelo") return guardarCambioModelo();
+  if(a === "al-taller"){
+    const u = A.unidades.find(x => x.id === ctx.id);
+    cerrarModal();
+    return modalNuevoTaller(u ? u.serie : "");
+  }
   if(a === "mover-modelo") return modalMoverModelo();
   if(a === "confirmar-mover") return moverModelo();
   if(a === "vaciar-equipos") return modalVaciarEquipos();
@@ -3313,6 +3825,7 @@ document.addEventListener("change", async ev => {
     catch(e){ ctx.error = e.message || "No se pudo leer el archivo"; }
     return pintarImportar();
   }
+  if(ev.target.id === "eq-modelo"){ A.filtroModelo = ev.target.value; return pintar(); }
   if(ev.target.id && ev.target.id.indexOf("r-") === 0){
     const v = ev.target.value;
     if(ev.target.id === "r-desde") A.rep.desde = v;
@@ -3355,6 +3868,12 @@ document.addEventListener("change", async ev => {
       ev.target.value = "";
       return pintarFormModelo();
     }
+    if(ctx.tipo === "nuevo-taller" || ctx.tipo === "taller"){
+      if(ctx.tipo === "nuevo-taller") leerNuevoTaller(); else leerTaller();
+      ctx.fotos.push({ id: "f" + nid(), data: data });
+      ev.target.value = "";
+      return ctx.tipo === "taller" ? pintarTaller() : pintarNuevoTaller();
+    }
     ctx.foto = data; ctx.fotoCambiada = true;
     const th = document.getElementById("thumb");
     if(th){ th.className = "thumb"; th.innerHTML = '<img src="' + data + '">'; }
@@ -3365,6 +3884,7 @@ document.addEventListener("change", async ev => {
 document.getElementById("q").addEventListener("input", e => { A.q = e.target.value.trim(); pintar(); });
 document.getElementById("fab").addEventListener("click", () => {
   if(A.vista === "proveedores") return modalProveedor(null);
+  if(A.vista === "taller") return modalNuevoTaller("");
   if(A.vista === "equipos") return modalIngreso(null);
   return modalModelo(null);
 });
@@ -3454,6 +3974,7 @@ function vigilar(){
     A.movs = (await Store.get("movs")) || [];
     A.facturas = (await Store.get("facturas")) || [];
     A.cotizaciones = (await Store.get("cotizaciones")) || [];
+    A.mantenimientos = (await Store.get("mantenimientos")) || [];
     pintar();
     for(const m of A.modelos){ await cargarFotosModelo(m); }
     pintar();
