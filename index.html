@@ -524,9 +524,9 @@ const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
   cotizaciones: [], cot: null, selEq: {}, mantenimientos: [],
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
-         categoria: "Todas", proveedorId: "", panel: "", cols: {}, sel: {} },
+         categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
-  vista: "stock", q: "", filtro: "Todas", filtroModelo: "", soloBajos: false, sinGuardar: false
+  vista: "stock", q: "", filtro: "Todas", filtroModelo: "", filtroTipo: "", filtroSit: {}, soloBajos: false, sinGuardar: false
 };
 const esAdmin = () => A.rol === "admin";
 const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones", mantenimientos: "mantenimientos" };
@@ -546,7 +546,8 @@ async function guardar(clave){
 async function guardarTodo(){ for(const k of ["modelos","proveedores","unidades","movs"]) await guardar(k); }
 
 function registrar(texto, serie){
-  const mov = { id: uuid(), ts: new Date().toISOString(), texto: texto, serie: serie || "", usuario: Sesion.email || "local" };
+  const mov = { id: uuid(), ts: new Date().toISOString(), texto: texto, serie: serie || "",
+    usuario: Sesion.nombre || Sesion.email || "local" };
   A.movs.unshift(mov);
   A.movs = A.movs.slice(0, 300);
   persistir("movimientos", mov);
@@ -815,8 +816,12 @@ function vistaStock(){
 
 function vistaEquipos(){
   const q = A.q.toLowerCase();
-  const chips = '<div class="chips">' + ["Todas", ...SITUACIONES].map(s =>
-    '<button class="chip ' + (A.filtro === s ? "on" : "") + '" data-sit="' + esc(s) + '">' + esc(s) + '</button>').join("") + '</div>';
+  const sits = Object.keys(A.filtroSit).filter(k => A.filtroSit[k]);
+  const chips = '<div class="chips">' +
+    '<button class="chip ' + (sits.length ? "" : "on") + '" data-sitm="Todas">Todas</button>' +
+    SITUACIONES.map(s => '<button class="chip ' + (A.filtroSit[s] ? "on" : "") + '" data-sitm="' + esc(s) + '">' +
+      esc(s) + '</button>').join("") +
+    (sits.length > 1 ? '<span class="mini" style="align-self:center">' + sits.length + ' situaciones</span>' : "") + '</div>';
 
   /* selector de modelo: solo los que tienen equipos, con su cantidad */
   const conEquipos = A.modelos
@@ -824,16 +829,24 @@ function vistaEquipos(){
     .filter(x => x.n > 0)
     .sort((a, b) => (a.m.codigo || "").localeCompare(b.m.codigo || ""));
   const sueltos = [...new Set(A.unidades.filter(u => !modelo(u.codigo)).map(u => u.codigo))];
-  const selModelo = '<label class="f" style="margin-bottom:10px"><span>Modelo</span>' +
+  const selModelo = '<div class="f2" style="margin-bottom:10px">' +
+    '<label class="f"><span>Modelo</span>' +
     '<select class="inp" id="eq-modelo"><option value="">Todos los modelos (' + nf.format(A.unidades.length) + ')</option>' +
     conEquipos.map(x => '<option value="' + esc(x.m.codigo) + '"' + (A.filtroModelo === x.m.codigo ? " selected" : "") + '>' +
       esc(x.m.codigo) + " · " + esc(x.m.nombre || x.m.modelo || "") + "  (" + x.n + ")" + '</option>').join("") +
     sueltos.map(c => '<option value="' + esc(c) + '"' + (A.filtroModelo === c ? " selected" : "") + '>' +
-      esc(c) + '  (sin ficha)</option>').join("") + '</select></label>';
+      esc(c) + '  (sin ficha)</option>').join("") + '</select></label>' +
+    '<label class="f"><span>Tipo</span><select class="inp" id="eq-tipo">' +
+      ["Todos", "Venta", "Arriendo", "Préstamo", "Sin tipo"].map(t =>
+        '<option value="' + (t === "Todos" ? "" : esc(t)) + '"' +
+        ((A.filtroTipo || "") === (t === "Todos" ? "" : t) ? " selected" : "") + '>' + t + '</option>').join("") +
+      '</select></label></div>';
 
   let us = A.unidades.filter(u => {
-    if(A.filtro !== "Todas" && u.situacion !== A.filtro) return false;
+    if(sits.length && sits.indexOf(u.situacion) < 0) return false;
     if(A.filtroModelo && u.codigo !== A.filtroModelo) return false;
+    if(A.filtroTipo === "Sin tipo"){ if(u.tipo) return false; }
+    else if(A.filtroTipo && u.tipo !== A.filtroTipo) return false;
     if(!q) return true;
     const p = proveedor(u.proveedorId);
     return [u.serie, u.codigo, u.cliente, u.ubicacion, u.oc, p && p.nombre].join(" ").toLowerCase().includes(q);
@@ -852,8 +865,10 @@ function vistaEquipos(){
     '</span></div>' +
     '<button class="btn btn-linea btn-sm" data-accion="' + (nSel ? "eq-ninguno" : "eq-todos") + '">' +
       (nSel ? "Quitar" : "Todos") + '</button></div>' +
-    (nSel ? '<button class="btn btn-celeste btn-w" style="margin-bottom:10px" data-accion="asignar-cliente">' +
-      'Asignar ' + nf.format(nSel) + (nSel === 1 ? " equipo a un cliente" : " equipos a un cliente") + '</button>' : "");
+    (nSel ? '<button class="btn btn-celeste btn-w" style="margin-bottom:8px" data-accion="asignar-cliente">' +
+      'Asignar ' + nf.format(nSel) + (nSel === 1 ? " equipo a un cliente" : " equipos a un cliente") + '</button>' +
+      '<button class="btn btn-linea btn-w" style="margin-bottom:10px" data-accion="liberar-equipos">' +
+      'Liberar ' + nf.format(nSel) + (nSel === 1 ? " equipo" : " equipos") + ' · dejar disponibles</button>' : "");
 
   return chips + selModelo + barra + '<div class="lista">' + enPantalla.map(u => {
     const m = modelo(u.codigo), p = proveedor(u.proveedorId), f = fotoEquipo(u);
@@ -1426,6 +1441,8 @@ async function guardarCot(){
   const ya = A.cotizaciones.find(x => x.id === c.id);
   if(ya) Object.assign(ya, fila); else A.cotizaciones.unshift(fila);
   await persistir("cotizaciones", fila);
+  registrar((ya ? "Cotización actualizada N° " : "Cotización creada N° ") + folio(c) +
+    (c.cliente ? " · " + c.cliente : ""), "");
   await Store.set("cot", c);
   pintar(); avisar("Cotización guardada");
 }
@@ -1448,7 +1465,7 @@ function abrirCot(id){
 const REPORTES = [
   ["modelo", "Por modelo"], ["dispo", "Disponibilidad"], ["cliente", "Por cliente"],
   ["proveedor", "Por proveedor"], ["vendedor", "Por vendedor"], ["equipo", "Por equipo"],
-  ["movs", "Movimientos"]
+  ["movs", "Quién hizo qué"]
 ];
 const PERIODOS = [["todo","Todo"], ["30","30 días"], ["90","90 días"], ["anio","Este año"]];
 const USA_PERIODO = { cliente: 1, proveedor: 1, vendedor: 1, movs: 1 };
@@ -1467,7 +1484,7 @@ const sitDe = (us, s) => us.filter(u => u.situacion === s).length;
 function filtroActivo(){
   const r = A.rep;
   return !!(r.desde || r.hasta || (r.situacion && r.situacion !== "Todas") ||
-    r.proveedorId || (r.categoria && r.categoria !== "Todas"));
+    r.proveedorId || r.usuario || (r.categoria && r.categoria !== "Todas"));
 }
 
 function rangoFechas(){
@@ -1663,13 +1680,18 @@ function generarReporte(){
       const f = String(m.ts || "").slice(0, 10);
       if(desde && f < desde) continue;
       if(hasta && f > hasta) continue;
-      R.filas.push({ clave: m.id, t: m.texto, s: (m.serie ? esc(m.serie) + " · " : "") +
-        new Date(m.ts).toLocaleString("es-CL", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) +
-        (m.usuario && m.usuario !== "local" ? " · " + esc(m.usuario) : ""), v: "", vs: "" });
-      R.csv.push([m.ts, m.texto, m.serie || "", m.usuario || ""]);
+      if(A.rep.usuario && m.usuario !== A.rep.usuario) continue;
+      R.filas.push({ clave: m.id, t: m.texto,
+        s: '<b style="color:var(--azul)">' + esc(m.usuario || "sin identificar") + '</b> · ' +
+           new Date(m.ts).toLocaleString("es-CL", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) +
+           (m.serie ? " · " + esc(m.serie) : ""), v: "", vs: "" });
+      R.csv.push([String(m.ts).slice(0, 10), new Date(m.ts).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
+        m.usuario || "sin identificar", m.texto, m.serie || ""]);
     }
-    R.cab = ["fecha","movimiento","serie","usuario"];
-    R.resumen = [["Movimientos", nf.format(R.filas.length)]];
+    R.cab = ["fecha","hora","usuario","movimiento","serie"];
+    R.resumen = [["Movimientos", nf.format(R.filas.length)],
+      ["Personas", nf.format([...new Set(R.csv.map(f => f[2]))].length)],
+      ["Último movimiento", R.csv.length ? fechaCorta(R.csv[0][0]) : "—"]];
   }
 
   if(q && tipo !== "equipo"){
@@ -2041,6 +2063,11 @@ function vistaReportes(){
       opciones(["Todas", ...SITUACIONES], r.situacion || "Todas") + '</select></label>' +
     '<label class="f"><span>Categoría</span><select class="inp" id="r-categoria">' +
       opciones(["Todas", ...cats], r.categoria || "Todas") + '</select></label></div>' +
+    (r.tipo === "movs" ? '<label class="f" style="margin-top:10px"><span>Usuario</span><select class="inp" id="r-usuario">' +
+      '<option value="">Todos</option>' +
+      [...new Set(A.movs.map(m => m.usuario).filter(Boolean))].sort().map(u =>
+        '<option value="' + esc(u) + '"' + (r.usuario === u ? " selected" : "") + '>' + esc(u) + '</option>').join("") +
+      '</select></label>' : "") +
     '<label class="f" style="margin-top:10px"><span>Proveedor</span><select class="inp" id="r-proveedor">' +
       '<option value="">Todos</option>' + A.proveedores.map(p => '<option value="' + p.id + '"' +
       (p.id === r.proveedorId ? " selected" : "") + '>' + esc(p.nombre) + '</option>').join("") + '</select></label>' +
@@ -2104,6 +2131,7 @@ function textoPeriodo(){
   if(r.situacion && r.situacion !== "Todas") extra.push(r.situacion);
   if(r.categoria && r.categoria !== "Todas") extra.push(r.categoria);
   if(r.proveedorId && proveedor(r.proveedorId)) extra.push(proveedor(r.proveedorId).nombre);
+  if(r.usuario) extra.push(r.usuario);
   return p + (extra.length ? " · " + extra.join(" · ") : "");
 }
 
@@ -2377,6 +2405,7 @@ async function borrarTaller(){
   for(const fid of (m.fotos || [])) await guardarFoto(fid, null);
   A.mantenimientos = A.mantenimientos.filter(x => x.id !== ctx.id);
   await borrarFila("mantenimientos", ctx.id);
+  registrar("Registro de taller eliminado", m.serie);
   cerrarModal(); pintar();
   avisar("Registro eliminado");
 }
@@ -2582,6 +2611,7 @@ async function guardarModelo(){
   m.fotos = ctx.fotos.map(f => f.id);
   await persistir("modelos", m);
   const nuevo = !ctx.id;
+  registrar((nuevo ? "Modelo creado: " : "Ficha de modelo editada: ") + m.codigo, "");
   cerrarModal(); pintar(); avisar(nuevo ? "Modelo agregado" : "Ficha actualizada");
 }
 
@@ -2629,7 +2659,8 @@ async function modalUnidad(id, codigoPre){
     '<button class="btn btn-celeste btn-w" data-accion="guardar-unidad">Guardar equipo</button>' +
     (u ? (function(){
       const s = u.situacion, b = [];
-      if(s === "Entregado") b.push(["devolver", "Registrar devolución", "linea"]);
+      if(s === "Entregado" || u.cliente || u.entrega)
+        b.push(["devolver", "Liberar · quitar cliente y fecha", "linea"]);
       if(s === "En revisión") b.push(["disponible", "Marcar como disponible", "linea"]);
       else if(s !== "Baja") b.push(["revision", "Enviar a revisión", "suave"]);
       b.push(s === "Baja" ? ["disponible", "Reactivar equipo", "linea"] : ["baja", "Dar de baja", "suave"]);
@@ -2730,6 +2761,7 @@ async function guardarProveedor(){
   if(ctx.id){ p = A.proveedores.find(x => x.id === ctx.id); Object.assign(p, datos); }
   else { p = Object.assign({ id: uuid() }, datos); A.proveedores.push(p); }
   await persistir("proveedores", p);
+  registrar((ctx.id ? "Proveedor editado: " : "Proveedor creado: ") + p.nombre, "");
   cerrarModal(); pintar(); avisar(ctx.id ? "Proveedor actualizado" : "Proveedor agregado");
 }
 
@@ -2795,6 +2827,9 @@ async function guardarFactura(){
   }
   if(previa) Object.assign(previa, datos); else A.facturas.push(datos);
   await persistir("facturas", factura(ctx.fid));
+  const prov0 = proveedor(ctx.pid);
+  registrar((previa ? "Factura editada: " : "Factura cargada: ") + (datos.numero || "sin número") +
+    (prov0 ? " · " + prov0.nombre : ""), "");
   const pid = ctx.pid;
   cerrarModal(); pintar(); avisar("Factura guardada");
   modalProveedor(pid);
@@ -2803,6 +2838,7 @@ async function guardarFactura(){
 async function borrarFactura(){
   const f = factura(ctx.id);
   await borrarArchivo(f);
+  registrar("Factura eliminada: " + ((f && f.numero) || "sin número"), "");
   A.facturas = A.facturas.filter(x => x.id !== ctx.id);
   A.unidades.forEach(u => { if(u.facturaId === ctx.id) u.facturaId = ""; });
   await borrarFila("facturas", ctx.id);
@@ -3145,6 +3181,47 @@ async function asignarCliente(){
   if(REMOTO && !A.sinGuardar) await sincronizar(true);
   cerrarModal(); pintar();
   avisar(us.length + (us.length === 1 ? " equipo asignado a " : " equipos asignados a ") + cliente);
+}
+
+/* --- devolver equipos al stock --- */
+function modalLiberar(){
+  const us = seleccionEquipos();
+  if(!us.length) return avisar("No hay equipos seleccionados");
+  ctx = { tipo: "liberar" };
+  const conCliente = us.filter(u => u.cliente).length;
+  const clientes = [...new Set(us.map(u => u.cliente).filter(Boolean))];
+  abrirModal(
+    '<div class="fila" style="display:block"><div class="t"><b>' + nf.format(us.length) +
+      (us.length === 1 ? " equipo vuelve a stock" : " equipos vuelven a stock") + '</b><span>' +
+      esc(us.slice(0, 8).map(u => u.serie).join(", ")) +
+      (us.length > 8 ? " y " + (us.length - 8) + " más" : "") + '</span></div></div>' +
+    (conCliente ? '<p class="mini" style="margin:0">Se les quitará el cliente y la fecha de entrega' +
+      (clientes.length ? " (" + esc(clientes.slice(0, 3).join(", ")) + (clientes.length > 3 ? " y otros" : "") + ")" : "") +
+      ', y quedarán como Disponible.</p>'
+      : '<p class="mini" style="margin:0">Quedarán como Disponible.</p>') +
+    '<p class="mini" style="margin:0">El vendedor y el instalador se conservan, igual que el historial de la entrega.</p>' +
+    '<button class="btn btn-celeste btn-w" data-accion="confirmar-liberar">Dejar disponibles</button>' +
+    '<button class="btn btn-suave btn-w" data-cerrar="1">Cancelar</button>',
+    "Liberar equipos");
+}
+
+async function liberarEquipos(){
+  const us = seleccionEquipos();
+  if(!us.length) return cerrarModal();
+  const clientes = [...new Set(us.map(u => u.cliente).filter(Boolean))];
+  for(const u of us){
+    u.cliente = "";
+    u.entrega = "";
+    u.tipo = "";
+    u.situacion = "Disponible";
+  }
+  await persistirLote("unidades", us);
+  registrar("Liberados " + us.length + " equipos" + (clientes.length ? " de " + clientes.join(", ") : "") +
+    ": vuelven a stock", us.length === 1 ? us[0].serie : "");
+  A.selEq = {};
+  if(REMOTO && !A.sinGuardar) await sincronizar(true);
+  cerrarModal(); pintar();
+  avisar(us.length + (us.length === 1 ? " equipo disponible" : " equipos disponibles"));
 }
 
 /* --- corregir el modelo de un equipo o de un lote completo --- */
@@ -3550,16 +3627,22 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm]");
   if(!t) return;
   const d = t.dataset;
 
   if(d.velo && ev.target === t) return cerrarModal();
   if(d.cerrar) return cerrarModal();
 
-  if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.soloBajos = false; A.q = ""; document.getElementById("q").value = ""; return pintar(); }
+  if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.filtroTipo = ""; A.filtroSit = {};
+    A.soloBajos = false; A.q = ""; document.getElementById("q").value = ""; return pintar(); }
   if(d.cat){ A.filtro = d.cat; return pintar(); }
   if(d.sit){ A.filtro = d.sit; return pintar(); }
+  if(d.sitm){
+    if(d.sitm === "Todas") A.filtroSit = {};
+    else A.filtroSit[d.sitm] = !A.filtroSit[d.sitm];
+    return pintar();
+  }
   if(d.bajos){ A.soloBajos = !A.soloBajos; return pintar(); }
 
   if(d.modelo) return modalFicha(d.modelo);
@@ -3620,6 +3703,7 @@ document.addEventListener("click", async ev => {
     const m = A.modelos.find(x => x.id === ctx.id);
     m.activo = !activo(m);
     await persistir("modelos", m);
+    registrar((activo(m) ? "Modelo visible para vendedores: " : "Modelo oculto a vendedores: ") + m.codigo, "");
     pintar();                                     // refresca también el catálogo de atrás
     pintarFicha();
     return avisar(activo(m) ? "Visible para los vendedores" : "Oculto para los vendedores");
@@ -3654,7 +3738,7 @@ document.addEventListener("click", async ev => {
   }
   if(a === "pdf-reporte") return reportePDF();
   if(a === "limpiar-filtros"){
-    Object.assign(A.rep, { desde: "", hasta: "", situacion: "Todas", categoria: "Todas", proveedorId: "" });
+    Object.assign(A.rep, { desde: "", hasta: "", situacion: "Todas", categoria: "Todas", proveedorId: "", usuario: "" });
     return pintar();
   }
   if(a === "todas-columnas"){ A.rep.cols[A.rep.tipo] = {}; return pintar(); }
@@ -3721,6 +3805,7 @@ document.addEventListener("click", async ev => {
     A.modelos = A.modelos.filter(x => x.id !== ctx.id);
     for(const fid of (m.fotos || [ctx.id])){ await guardarFoto(fid, null); delete A.fotos[fid]; }
     await borrarFila("modelos", ctx.id);
+    registrar("Modelo eliminado: " + m.codigo, "");
     cerrarModal(); pintar(); return avisar("Modelo eliminado");
   }
   if(a === "borrar-unidad"){
@@ -3732,7 +3817,9 @@ document.addEventListener("click", async ev => {
     cerrarModal(); pintar(); return avisar("Equipo eliminado");
   }
   if(a === "borrar-proveedor"){
+    const pBorrado = proveedor(ctx.id);
     A.proveedores = A.proveedores.filter(x => x.id !== ctx.id);
+    registrar("Proveedor eliminado: " + (pBorrado ? pBorrado.nombre : ""), "");
     A.unidades.forEach(u => { if(u.proveedorId === ctx.id) u.proveedorId = ""; });
     A.modelos.forEach(m => { if(m.proveedorId === ctx.id) m.proveedorId = ""; });
     await borrarFila("proveedores", ctx.id);
@@ -3747,6 +3834,8 @@ document.addEventListener("click", async ev => {
   }
   if(a === "eq-ninguno"){ A.selEq = {}; return pintar(); }
   if(a === "asignar-cliente") return modalAsignarCliente();
+  if(a === "liberar-equipos") return modalLiberar();
+  if(a === "confirmar-liberar") return liberarEquipos();
   if(a === "guardar-asignacion") return asignarCliente();
   if(a === "buscar-serie-taller"){
     leerNuevoTaller();
@@ -3826,6 +3915,7 @@ document.addEventListener("change", async ev => {
     return pintarImportar();
   }
   if(ev.target.id === "eq-modelo"){ A.filtroModelo = ev.target.value; return pintar(); }
+  if(ev.target.id === "eq-tipo"){ A.filtroTipo = ev.target.value; return pintar(); }
   if(ev.target.id && ev.target.id.indexOf("r-") === 0){
     const v = ev.target.value;
     if(ev.target.id === "r-desde") A.rep.desde = v;
@@ -3833,6 +3923,7 @@ document.addEventListener("change", async ev => {
     if(ev.target.id === "r-situacion") A.rep.situacion = v;
     if(ev.target.id === "r-categoria") A.rep.categoria = v;
     if(ev.target.id === "r-proveedor") A.rep.proveedorId = v;
+    if(ev.target.id === "r-usuario") A.rep.usuario = v;
     return pintar();
   }
   if(["c-cliente","c-destino","c-modalidad","c-envio","c-inst","c-fecha","c-visitas","c-horas"].indexOf(ev.target.id) >= 0){
