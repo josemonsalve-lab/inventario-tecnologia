@@ -1290,7 +1290,9 @@ async function cotizacionPDF(){
 }
 
 function vistaCotizador(){
-  const c = A.cot, r = calcularCot(c);
+  const c = A.cot;
+  if(!c.id) c.fecha = hoy();          // borrador: siempre el día en curso
+  const r = calcularCot(c);
   const ins = tarifaInstal(c.destino);
   const dinero = u => uf2(u) + " UF · " + clp(u * c.uf);
 
@@ -1302,13 +1304,15 @@ function vistaCotizador(){
     '<label class="f" style="margin-top:10px"><span>Modalidad</span><select class="inp" id="c-modalidad">' +
       opciones(["Venta","Arriendo"], c.modalidad) + '</select></label>' +
     '<div class="f2" style="margin-top:10px">' +
-    '<label class="f"><span>Fecha de la cotización</span><input class="inp" id="c-fecha" type="date" value="' + esc(c.fecha || hoy()) + '"></label>' +
+    '<div><span style="display:block;font-size:13px;font-weight:700;color:var(--azul);margin-bottom:4px">Fecha</span>' +
+    '<div class="inp" style="background:var(--fondo);font-weight:700">' + esc(fechaCorta(c.fecha || hoy())) + '</div></div>' +
     '<div><span style="display:block;font-size:13px;font-weight:700;color:var(--azul);margin-bottom:4px">N° de cotización</span>' +
     '<div class="inp" style="background:var(--fondo);font-weight:700">' + folio(c) + '</div></div></div>' +
     '<div class="fila" style="margin-top:10px;background:var(--fondo)"><div class="t">' +
       '<b>1 UF = ' + clp(c.uf) + '</b><span>' +
       (A.ufDia === hoy() && A.ufFuente ? "Valor del " + fechaCorta(A.ufFecha) + " según " + esc(A.ufFuente)
-        : A.ufFecha ? "Último valor obtenido: " + fechaCorta(A.ufFecha) + (A.ufFuente ? " · " + esc(A.ufFuente) : "")
+        : A.ufFecha ? '<span style="color:var(--rojo)">Valor del ' + fechaCorta(A.ufFecha) +
+            ", no se pudo consultar hoy</span>"
         : "Valor de respaldo, sin conexión a mindicador.cl") + '</span></div>' +
       '<button class="btn btn-linea btn-sm" data-accion="refrescar-uf">Actualizar</button></div>' +
     '<div class="fchips" style="margin-top:10px">' +
@@ -1384,7 +1388,6 @@ function leerCot(){
   const v = id => { const e = document.getElementById(id); return e ? e.value : null; };
   if(v("c-cliente") !== null) c.cliente = v("c-cliente");
   if(v("c-destino") !== null) c.destino = v("c-destino");
-  if(v("c-fecha") !== null) c.fecha = v("c-fecha") || hoy();
   if(v("c-modalidad") !== null) c.modalidad = v("c-modalidad");
   if(v("c-envio") !== null) c.envioManual = v("c-envio") === "" ? null : Number(v("c-envio"));
   if(v("c-inst") !== null) c.instalaciones = v("c-inst") === "" ? null : Math.max(0, Number(v("c-inst")));
@@ -3520,10 +3523,18 @@ function pintarUsuarios(){
       ((ps.length - admins) === 1 ? " vendedor" : " vendedores") + '</span></div></div>' +
 
     (ps.length ? '<div class="lista">' + ps.map(p =>
-      '<div class="fila"><div class="t"><b>' + esc(p.nombre || p.email) + '</b><span>' + esc(p.email || "") + '</span></div>' +
+      '<div class="fila"><div class="t"><b>' + esc(p.nombre || p.email) +
+        (p.id === Sesion.uid ? ' <span class="mini">(tú)</span>' : "") + '</b>' +
+        '<span>' + esc(p.email || "") + '</span></div>' +
       '<select class="inp" style="width:auto;padding:6px 8px;font-size:12px" data-rolde="' + esc(p.id) + '">' +
         ROLES.map(r => '<option value="' + r + '"' + (p.rol === r ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
-      '</select></div>').join("") + '</div>' : '<p class="mini">Todavía no hay perfiles cargados.</p>') +
+      '</select>' +
+      (p.id === Sesion.uid ? "" :
+        '<button data-borraruser="' + esc(p.id) + '" title="Eliminar" ' +
+        'style="color:var(--rojo);padding:0 4px">' +
+        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button>') +
+      '</div>').join("") + '</div>' : '<p class="mini">Todavía no hay perfiles cargados.</p>') +
 
     '<div class="sec">Invitar a alguien</div>' +
     '<div class="f2"><label class="f"><span>Correo</span><input class="inp" id="us-email" type="email" placeholder="nombre@rexmas.com"></label>' +
@@ -3550,6 +3561,50 @@ async function cambiarRol(id, rol){
     avisar((p.nombre || p.email) + " ahora es " + nombreRol(rol).toLowerCase());
   }catch(e){ p.rol = antes; fallo(e, "perfiles"); }
   pintarUsuarios();
+}
+
+function modalBorrarUsuario(id){
+  const p = (A.perfiles || []).find(x => x.id === id);
+  if(!p) return;
+  if(p.id === Sesion.uid) return avisar("No puedes eliminar tu propia cuenta");
+  if(p.rol === "admin" && (A.perfiles || []).filter(x => x.rol === "admin").length <= 1)
+    return avisar("Debe quedar al menos un administrador");
+  ctx = { tipo: "borrar-usuario", id: id };
+  abrirModal(
+    '<div class="fila" style="display:block"><div class="t"><b>' + esc(p.nombre || p.email) + '</b>' +
+      '<span>' + esc(p.email || "") + " · " + nombreRol(p.rol) + '</span></div></div>' +
+    '<p class="mini" style="margin:0">La cuenta se elimina de Supabase y la persona pierde el acceso de inmediato. ' +
+    'Lo que hizo sigue registrado en el historial con su nombre.</p>' +
+    (p.rol === "admin" ? '<p class="aviso">Es una cuenta de administrador.</p>' : "") +
+    '<button class="btn btn-rojo btn-w" data-accion="confirmar-borrar-usuario">Eliminar la cuenta</button>' +
+    '<button class="btn btn-suave btn-w" data-accion="usuarios">Cancelar</button>',
+    "Eliminar usuario");
+}
+
+async function borrarUsuario(){
+  const p = (A.perfiles || []).find(x => x.id === ctx.id);
+  if(!p) return cerrarModal();
+  const btn = document.querySelector('[data-accion="confirmar-borrar-usuario"]');
+  if(btn){ btn.textContent = "Eliminando…"; btn.disabled = true; }
+  try{
+    const r = await fetch(API.base() + "/functions/v1/invitar", {
+      method: "POST", headers: API.cabeceras(),
+      body: JSON.stringify({ accion: "eliminar", id: p.id })
+    });
+    let j = {};
+    try{ j = await r.json(); }catch(e){}
+    if(r.status === 404) throw new Error("Falta instalar la función 'invitar' en Supabase.");
+    if(!r.ok) throw new Error(j.error || "No se pudo eliminar la cuenta");
+    registrar("Usuario eliminado: " + (p.nombre || p.email), "");
+    A.perfiles = await cargarPerfiles();
+    cerrarModal();
+    await modalUsuarios();
+    avisar((p.nombre || p.email) + " eliminado");
+  }catch(e){
+    A.ultimoError = e.message; A.sinGuardar = true;
+    cerrarModal(); pintar();
+    avisar("No se pudo eliminar. Revisa el aviso rojo.");
+  }
 }
 
 async function invitarUsuario(){
@@ -3747,7 +3802,7 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-borraruser]");
   if(!t) return;
   const d = t.dataset;
 
@@ -3789,6 +3844,7 @@ document.addEventListener("click", async ev => {
     return pintar();
   }
   if(d.mant) return modalTaller(d.mant);
+  if(d.borraruser) return modalBorrarUsuario(d.borraruser);
   if(d.seleq){ A.selEq[d.seleq] = !A.selEq[d.seleq]; return pintar(); }
   if(d.vaciarmod){ ctx.sel[d.vaciarmod] = !ctx.sel[d.vaciarmod]; return pintarVaciar(); }
   if(d.selfila){
@@ -4005,6 +4061,7 @@ document.addEventListener("click", async ev => {
   if(a === "confirmar-deshacer") return deshacerImportacion();
   if(a === "usuarios") return modalUsuarios();
   if(a === "invitar-usuario") return invitarUsuario();
+  if(a === "confirmar-borrar-usuario") return borrarUsuario();
   if(a === "conectar") return modalConexion();
   if(a === "guardar-conexion") return guardarConexion();
   if(a === "borrar-conexion"){
@@ -4051,7 +4108,7 @@ document.addEventListener("change", async ev => {
     if(ev.target.id === "r-usuario") A.rep.usuario = v;
     return pintar();
   }
-  if(["c-cliente","c-destino","c-modalidad","c-envio","c-inst","c-fecha","c-visitas","c-horas"].indexOf(ev.target.id) >= 0){
+  if(["c-cliente","c-destino","c-modalidad","c-envio","c-inst","c-visitas","c-horas"].indexOf(ev.target.id) >= 0){
     leerCot();
     await Store.set("cot", A.cot);
     return pintar();
@@ -4203,16 +4260,34 @@ async function arrancarSesion(){
   pintar();
 }
 
+/* Si cambió el día, vuelve a pedir la UF y la aplica a la cotización en curso. */
+async function refrescarUFSiCambioElDia(){
+  if(A.ufDia === hoy()) return false;
+  const antes = A.uf;
+  await actualizarUF();
+  if(A.cot && !A.cot.id) A.cot.uf = A.uf || A.cot.uf;
+  return A.uf !== antes;
+}
+
 function vigilar(){
   if(A.vigilando) return;
   A.vigilando = true;
   setInterval(async () => {
-    if(!REMOTO || document.hidden || document.getElementById("modal").innerHTML || !Sesion.rol) return;
+    if(document.hidden || document.getElementById("modal").innerHTML) return;
+    const cambio = await refrescarUFSiCambioElDia();
+    if(!REMOTO || !Sesion.rol){ if(cambio) pintar(); return; }
     await sincronizar(true); pintar();
   }, 20000);
   setInterval(() => { if(!document.hidden) pintarEstado(); }, 15000);
   window.addEventListener("focus", async () => {
-    if(REMOTO && Sesion.rol && !document.getElementById("modal").innerHTML){ await sincronizar(true); pintar(); }
+    if(document.getElementById("modal").innerHTML) return;
+    const cambio = await refrescarUFSiCambioElDia();
+    if(REMOTO && Sesion.rol){ await sincronizar(true); pintar(); }
+    else if(cambio) pintar();
+  });
+  document.addEventListener("visibilitychange", async () => {
+    if(document.hidden || document.getElementById("modal").innerHTML) return;
+    if(await refrescarUFSiCambioElDia()) pintar();
   });
 }
 
@@ -4239,6 +4314,7 @@ function vigilar(){
     pintar();
     for(const m of A.modelos){ await cargarFotosModelo(m); }
     pintar();
+    vigilar();
     return;
   }
 
