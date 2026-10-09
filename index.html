@@ -1311,13 +1311,20 @@ function vistaCotizador(){
     '<div class="inp" style="background:var(--fondo);font-weight:700">' + esc(fechaCorta(c.fecha || hoy())) + '</div></div>' +
     '<div><span style="display:block;font-size:13px;font-weight:700;color:var(--azul);margin-bottom:4px">N° de cotización</span>' +
     '<div class="inp" style="background:var(--fondo);font-weight:700">' + folio(c) + '</div></div></div>' +
-    '<div class="fila" style="margin-top:10px;background:var(--fondo)"><div class="t">' +
-      '<b>1 UF = ' + clpUF(c.uf) + '</b><span>' +
-      (A.ufDia === hoy() && A.ufFuente ? "Valor del " + fechaCorta(A.ufFecha) + " según " + esc(A.ufFuente)
-        : A.ufFecha ? '<span style="color:var(--rojo)">Valor del ' + fechaCorta(A.ufFecha) +
-            ", no se pudo consultar hoy</span>"
-        : "Valor de respaldo, sin conexión a mindicador.cl") + '</span></div>' +
-      '<button class="btn btn-linea btn-sm" data-accion="refrescar-uf">Actualizar</button></div>' +
+    (function(){
+      const vieja = !!c.id && A.uf && Math.abs(Number(c.uf) - A.uf) > 0.009;
+      return '<div class="fila" style="margin-top:10px;background:' + (vieja ? "#fff4e0" : "var(--fondo)") + '"><div class="t">' +
+        '<b>1 UF = ' + clpUF(c.uf) + '</b><span>' +
+        (vieja
+          ? '<span style="color:#a76a00">Valor con el que se emitió esta cotización. Hoy la UF está en ' +
+            clpUF(A.uf) + '.</span>'
+          : (A.ufDia === hoy() && A.ufFuente ? "Valor del " + fechaCorta(A.ufFecha) + " según " + esc(A.ufFuente)
+            : A.ufFecha ? '<span style="color:var(--rojo)">Valor del ' + fechaCorta(A.ufFecha) +
+                ", no se pudo consultar hoy</span>"
+            : "Valor de respaldo, sin conexión a mindicador.cl")) + '</span></div>' +
+        '<button class="btn btn-linea btn-sm" data-accion="' + (vieja ? "uf-hoy" : "refrescar-uf") + '">' +
+        (vieja ? "Usar la de hoy" : "Actualizar") + '</button></div>';
+    })() +
     '<div class="fchips" style="margin-top:10px">' +
     '<button class="chip ' + (c.enviar ? "on" : "") + '" data-cot="enviar">Con envío</button>' +
     (c.enviar ? '<button class="chip ' + (c.seguro ? "on" : "") + '" data-cot="seguro">Seguro +25%</button>' : "") +
@@ -3947,6 +3954,14 @@ document.addEventListener("click", async ev => {
     A.cot.lineas.splice(ctx.idx, 1);
     await Store.set("cot", A.cot);
     cerrarModal(); return pintar();
+  }
+  if(a === "uf-hoy"){
+    leerCot();
+    const antes = A.cot.uf;
+    A.cot.uf = A.uf || antes;
+    await Store.set("cot", A.cot);
+    pintar();
+    return avisar("Recalculado con la UF de hoy: " + clpUF(A.cot.uf));
   }
   if(a === "refrescar-uf"){
     avisar("Consultando el valor de la UF…");
