@@ -562,6 +562,9 @@ const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const nf = new Intl.NumberFormat("es-CL");
 const clp = n => "$" + nf.format(Math.round(n || 0));
+/* La UF lleva dos decimales: 41.130,94 y no 41.131 */
+const nfUF = new Intl.NumberFormat("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const clpUF = n => "$" + nfUF.format(Number(n) || 0);
 const hoy = () => new Date().toISOString().slice(0,10);
 const fechaCorta = d => d ? new Date(d + (d.length === 10 ? "T12:00:00" : "")).toLocaleDateString("es-CL",{day:"2-digit",month:"short",year:"numeric"}) : "—";
 const fechaLarga = d => d ? new Date(String(d).slice(0,10) + "T12:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"long",year:"numeric"}) : "";
@@ -1264,7 +1267,7 @@ async function cotizacionPDF(){
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...GRIS);
   const notas = [
     "Valores expresados en UF. El monto en pesos se calcula con la UF de " +
-      fechaLarga(A.ufFecha || c.fecha || hoy()) + " (" + clp(c.uf) + ")" +
+      fechaLarga(A.ufFecha || c.fecha || hoy()) + " (" + clpUF(c.uf) + ")" +
       (A.ufFuente ? ", según " + A.ufFuente + "." : "."),
     r.nInst ? "La instalación se cotiza por equipo instalado, salvo que se indique otra cantidad." : "",
     r.nVisitas ? "Cada visita técnica considera 2 horas en terreno; el tiempo adicional se cobra por hora." : "",
@@ -1309,7 +1312,7 @@ function vistaCotizador(){
     '<div><span style="display:block;font-size:13px;font-weight:700;color:var(--azul);margin-bottom:4px">N° de cotización</span>' +
     '<div class="inp" style="background:var(--fondo);font-weight:700">' + folio(c) + '</div></div></div>' +
     '<div class="fila" style="margin-top:10px;background:var(--fondo)"><div class="t">' +
-      '<b>1 UF = ' + clp(c.uf) + '</b><span>' +
+      '<b>1 UF = ' + clpUF(c.uf) + '</b><span>' +
       (A.ufDia === hoy() && A.ufFuente ? "Valor del " + fechaCorta(A.ufFecha) + " según " + esc(A.ufFuente)
         : A.ufFecha ? '<span style="color:var(--rojo)">Valor del ' + fechaCorta(A.ufFecha) +
             ", no se pudo consultar hoy</span>"
@@ -1443,7 +1446,7 @@ function textoCot(){
     if(c.iva) L.push("Total con IVA: " + clp((r.unico + r.ivaUnico) * c.uf));
   }
   L.push("");
-  L.push("UF usada: " + nf.format(c.uf) + (A.ufFecha ? " (" + fechaCorta(A.ufFecha) + ")" : ""));
+  L.push("UF usada: " + nfUF.format(Number(c.uf) || 0) + (A.ufFecha ? " (" + fechaCorta(A.ufFecha) + ")" : ""));
   return L.join("\n");
 }
 
@@ -3952,7 +3955,7 @@ document.addEventListener("click", async ev => {
     if(!A.cot.id) A.cot.uf = A.uf;
     await Store.set("cot", A.cot);
     pintar();
-    return avisar(A.ufDia === hoy() ? "UF al día: " + clp(A.uf) : "No se pudo consultar, sigue " + clp(antes));
+    return avisar(A.ufDia === hoy() ? "UF al día: " + clpUF(A.uf) : "No se pudo consultar, sigue " + clpUF(antes));
   }
   if(a === "copiar-cot"){ leerCot(); return copiarCot(); }
   if(a === "pdf-cot"){ leerCot(); await Store.set("cot", A.cot); return cotizacionPDF(); }
