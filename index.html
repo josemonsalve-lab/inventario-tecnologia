@@ -987,9 +987,26 @@ function vistaCuenta(){
     '<span>' + (A.ultima ? "Última actualización: " + new Date(A.ultima).toLocaleString("es-CL")
       : REMOTO ? "Nunca" : "Sin base compartida configurada") + '</span></div></div>' +
     '<button class="btn btn-linea btn-w" data-accion="refrescar">Actualizar ahora</button>' +
-    (REMOTO ? '<button class="btn btn-rojo btn-w" data-accion="salir">Cerrar sesión</button>'
+    (REMOTO ? '<button class="btn btn-rojo btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
             : '<button class="btn btn-linea btn-w" data-accion="ver-vendedor">Volver a vista de administrador</button>') +
     '</div>';
+}
+
+/* Pregunta antes de ejecutar una acción, con el detalle de lo que va a pasar. */
+function modalConfirmar(titulo, texto, accion, boton, tono){
+  const antes = ctx;
+  ctx = Object.assign({}, antes, { tipo: "confirmar" });
+  abrirModal(
+    '<p style="margin:0">' + texto + '</p>' +
+    '<button class="btn btn-' + (tono || "celeste") + ' btn-w" data-accion="' + accion + '">' + esc(boton) + '</button>' +
+    '<button class="btn btn-suave btn-w" data-cerrar="1">Cancelar</button>',
+    titulo);
+}
+
+function soloSuper(){
+  if(esSuper()) return false;
+  avisar("Solo el super administrador puede hacer esto");
+  return true;
 }
 
 function vistaAjustes(){
@@ -998,15 +1015,18 @@ function vistaAjustes(){
     '<div class="fila"><div class="t"><b>Datos cargados desde el servidor</b><span>' +
       nf.format(t.total) + " equipos · " + nf.format(t.modelos) + " modelos · " + nf.format(t.prov) + ' proveedores</span>' +
       '<span>Guardado en: ' + (Store.modo() === "idb" ? "este dispositivo (IndexedDB)" : Store.modo() === "local" ? "este dispositivo (almacenamiento local)" : "solo memoria, se pierde al cerrar") + '</span></div></div>' +
-    '<button class="btn btn-linea btn-w" data-accion="cargar-catalogo">Cargar catálogo Rex+ (' + CATALOGO_REX.length + ' modelos)</button>' +
-    '<button class="btn btn-linea btn-w" data-accion="abrir-cotizador">Abrir cotizador</button>' +
+    '<button class="btn btn-linea btn-w" data-accion="pedir-catalogo">Cargar catálogo Rex+ (' + CATALOGO_REX.length + ' modelos)</button>' +
     '<button class="btn btn-linea btn-w" data-accion="importar">Importar equipos desde Excel</button>' +
-    (ultimaImportacion() ? '<button class="btn btn-rojo btn-w" data-accion="deshacer-importacion">' +
-      'Deshacer última importación (' + nf.format(ultimaImportacion().n) + ' equipos)</button>' : "") +
-    (A.unidades.length ? '<button class="btn btn-rojo btn-w" data-accion="vaciar-equipos">' +
-      'Vaciar equipos y mantener el catálogo</button>' : "") +
     '<button class="btn btn-linea btn-w" data-accion="exportar">Exportar todo a CSV</button>' +
-    '<button class="btn btn-rojo btn-w" data-accion="borrar">Borrar todos los datos</button>' +
+    (esSuper()
+      ? '<div class="sec">Acciones del super administrador</div>' +
+        (ultimaImportacion() ? '<button class="btn btn-rojo btn-w" data-accion="deshacer-importacion">' +
+          'Deshacer última importación (' + nf.format(ultimaImportacion().n) + ' equipos)</button>' : "") +
+        (A.unidades.length ? '<button class="btn btn-rojo btn-w" data-accion="vaciar-equipos">' +
+          'Vaciar equipos y mantener el catálogo</button>' : "") +
+        '<button class="btn btn-rojo btn-w" data-accion="borrar">Borrar todos los datos</button>'
+      : '<p class="mini" style="margin:10px 0 0">Vaciar equipos, deshacer importaciones y borrar datos ' +
+        'quedan reservados al super administrador.</p>') +
     '<div class="sec">Conexión</div>' +
     '<div class="fila"><div class="t"><b>' + (REMOTO ? esc(CFG.url) : "Sin conexión: modo local") + '</b>' +
       '<span>' + (REMOTO ? "Inventario compartido" : "Los datos quedan en este dispositivo") + '</span></div></div>' +
@@ -1017,7 +1037,7 @@ function vistaAjustes(){
     '<div class="sec">Sesión</div>' +
     '<div class="fila"><div class="t"><b>' + esc(Sesion.nombre || "Usuario local") + '</b><span>' +
       esc(Sesion.email || "modo local, sin cuentas") + ' · ' + (esAdmin() ? "administrador" : "vendedor") + '</span></div></div>' +
-    (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="salir">Cerrar sesión</button>'
+    (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
             : '<button class="btn btn-linea btn-w" data-accion="ver-vendedor">Ver como vendedor</button>') +
     '<p class="mini" style="text-align:center;margin-top:8px">Los datos viven solo en este teléfono. Exporta cada cierto tiempo si quieres respaldo.</p></div>';
 }
@@ -3654,6 +3674,7 @@ async function moverModelo(){
 
 /* --- vaciar los equipos de los modelos elegidos --- */
 function modalVaciarEquipos(){
+  if(soloSuper()) return;
   ctx = { tipo: "vaciar", sel: {}, paso: 1 };
   pintarVaciar();
 }
@@ -3761,6 +3782,7 @@ function ultimaImportacion(){
 }
 
 async function modalDeshacer(){
+  if(soloSuper()) return;
   const l = ultimaImportacion();
   if(!l) return avisar("No hay importaciones que deshacer");
   const info = await Store.get("ultimoLote");
@@ -3847,7 +3869,10 @@ async function modalUsuarios(){
 }
 
 function pintarUsuarios(){
-  const ps = A.perfiles || [];
+  const orden = { super: 0, admin: 1, vendedor: 2 };
+  const ps = (A.perfiles || []).slice().sort((a, b) =>
+    (orden[a.rol] ?? 3) - (orden[b.rol] ?? 3) ||
+    String(a.nombre || a.email).localeCompare(String(b.nombre || b.email)));
   const admins = ps.filter(mandan).length;
   abrirModal(
     '<div class="fila" style="display:block"><div class="t"><b>' + nf.format(ps.length) +
@@ -3867,7 +3892,8 @@ function pintarUsuarios(){
     '<div class="sec">Invitar a alguien</div>' +
     '<div class="f2"><label class="f"><span>Correo</span><input class="inp" id="us-email" type="email" placeholder="nombre@rexmas.com"></label>' +
     '<label class="f"><span>Rol</span><select class="inp" id="us-rol">' +
-      ROLES.map(r => '<option value="' + r + '"' + (r === "vendedor" ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
+      ROLES.filter(r => r !== "super" || esSuper())
+        .map(r => '<option value="' + r + '"' + (r === "vendedor" ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
       '</select></label></div>' +
     '<label class="f"><span>Nombre</span><input class="inp" id="us-nombre" placeholder="Como aparecerá en el historial"></label>' +
     '<p class="mini" style="margin:0">Recibirá un correo con un enlace para crear su contraseña y entrar.</p>' +
@@ -3893,6 +3919,8 @@ async function cambiarRol(id, rol){
 function modalUsuario(id){
   const p = (A.perfiles || []).find(x => x.id === id);
   if(!p) return;
+  if(p.rol === "super" && !esSuper() && p.id !== Sesion.uid)
+    return avisar("La ficha de un super administrador solo la edita otro super");
   ctx = { tipo: "usuario", id: id };
   const grupos = [...new Set((A.perfiles || []).map(x => x.grupo).filter(Boolean))].sort();
   abrirModal(
@@ -3920,6 +3948,7 @@ function modalUsuario(id){
 async function guardarUsuario(){
   const p = (A.perfiles || []).find(x => x.id === ctx.id);
   if(!p) return cerrarModal();
+  if(p.rol === "super" && !esSuper()) return avisar("Solo un super administrador puede modificar a otro");
   const rol = val("u-rol") || p.rol;
   if(p.rol === "super" && rol !== "super" && !esSuper())
     return avisar("Solo un super administrador puede cambiar ese rol");
@@ -4252,6 +4281,9 @@ document.addEventListener("click", async ev => {
   if(a === "guardar-clave") return guardarClave();
   if(a === "recuperar") return pedirRecuperacion();
   if(a === "refrescar"){ await actualizarUF(); await sincronizar(); pintar(); return avisar(A.enLinea ? "Inventario actualizado" : "Sin conexión"); }
+  if(a === "pedir-salir") return modalConfirmar("Cerrar sesión",
+    "Vas a salir de la cuenta <b>" + esc(Sesion.email || "") + "</b> en este dispositivo. " +
+    "Los datos del inventario siguen en el servidor.", "salir", "Cerrar sesión", "rojo");
   if(a === "salir"){
     await API.salir();
     A.modelos = []; A.unidades = []; A.proveedores = []; A.movs = []; A.dispo = []; A.fotos = {}; A.rol = "";
@@ -4400,7 +4432,14 @@ document.addEventListener("click", async ev => {
     if(!REMOTO) await guardarTodo();
     cerrarModal(); pintar(); return avisar("Proveedor eliminado");
   }
-  if(a === "cargar-catalogo") return cargarCatalogo();
+  if(a === "pedir-catalogo"){
+    const faltan = CATALOGO_REX.filter(c => !A.modelos.some(m => m.codigo === c.codigo)).length;
+    return modalConfirmar("Cargar el catálogo Rex+",
+      "Se agregan <b>" + faltan + "</b> modelos con sus precios en UF y su ficha técnica. " +
+      "Los " + (CATALOGO_REX.length - faltan) + " que ya existen no se tocan y no se pierde ninguna foto.",
+      "cargar-catalogo", "Cargar " + faltan + " modelos");
+  }
+  if(a === "cargar-catalogo"){ cerrarModal(); return cargarCatalogo(); }
   if(a === "eq-todos"){
     A.selEq = {};
     document.querySelectorAll("[data-seleq]").forEach(b => { A.selEq[b.dataset.seleq] = true; });
@@ -4481,6 +4520,7 @@ document.addEventListener("click", async ev => {
   if(a === "hacer-importar") return hacerImportar();
   if(a === "exportar") return exportar();
   if(a === "borrar"){
+    if(soloSuper()) return;
     return abrirModal('<p>Se eliminan ' + nf.format(A.unidades.length) + ' equipos, ' + nf.format(A.modelos.length) +
       ' modelos, los proveedores y las fotos. No se puede deshacer.</p>' +
       '<button class="btn btn-rojo btn-w" data-accion="confirmar-borrar">Sí, borrar todo</button>' +
