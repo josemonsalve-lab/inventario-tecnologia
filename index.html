@@ -532,7 +532,7 @@ async function sincronizar(silencioso){
     }
     A.modelos = (await traerTodo("modelos", "select=*&order=codigo")).map(f => deFila("modelos", f));
     A.proveedores = (await traerTodo("proveedores", "select=*&order=nombre")).map(f => deFila("proveedores", f));
-    if(A.rol === "admin"){
+    if(esAdmin()){                                 /* admin y super descargan el inventario completo */
       A.unidades = (await traerTodo("unidades", "select=*&order=serie")).map(f => deFila("unidades", f));
       A.movs = ((await API.req("GET", "movimientos?select=*&order=ts.desc&limit=200")) || []).map(f => deFila("movimientos", f));
       A.facturas = (await traerTodo("facturas", "select=*&order=fecha.desc")).map(f => deFila("facturas", f));
