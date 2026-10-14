@@ -92,6 +92,8 @@ header{background:#fff;border-bottom:1px solid var(--linea);position:sticky;top:
 nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--linea);display:flex;z-index:40;padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;min-width:0;padding:9px 1px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--n500);font-size:9.5px;font-weight:700}
 nav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.globo{position:absolute;top:-4px;right:-7px;background:var(--rojo);color:#fff;border-radius:100px;
+  font-size:9px;font-weight:700;min-width:15px;height:15px;line-height:15px;text-align:center;padding:0 3px}
 nav button.on{color:var(--azul)}
 
 /* modal */
@@ -300,6 +302,8 @@ const MAPA = {
   unidades: { proveedorId: "proveedor_id", facturaId: "factura_id" },   /* lote y creado viajan igual */
   facturas: { proveedorId: "proveedor_id" },
   mantenimientos: { unidadId: "unidad_id", fechaIngreso: "fecha_ingreso", fechaSalida: "fecha_salida" },
+  tareas: { asignadoA: "asignado_a", asignadoNombre: "asignado_nombre", creadorId: "creador_id",
+    creadorNombre: "creador_nombre" },
   cotizaciones: { usuarioId: "usuario_id", usuarioEmail: "usuario_email", envioUF: "envio_uf",
     instalacionUF: "instalacion_uf", totalUF: "total_uf" },
   proveedores: {}, movimientos: {}, fotos: {}
@@ -527,10 +531,12 @@ async function sincronizar(silencioso){
       A.unidades = []; A.movs = []; A.facturas = []; A.mantenimientos = [];
     }
     A.cotizaciones = (await traerTodo("cotizaciones", "select=*&order=creada.desc")).map(f => deFila("cotizaciones", f));
+    A.tareas = (await traerTodo("tareas", "select=*&order=creada.desc")).map(f => deFila("tareas", f));
+    if(!A.perfiles.length) A.perfiles = await cargarPerfiles();
     A.ultima = Date.now(); A.enLinea = true;
     await Store.set("cache", { modelos: A.modelos, proveedores: A.proveedores, unidades: A.unidades,
       movs: A.movs, dispo: A.dispo, facturas: A.facturas, cotizaciones: A.cotizaciones,
-      mantenimientos: A.mantenimientos, ts: A.ultima, rol: A.rol });
+      mantenimientos: A.mantenimientos, tareas: A.tareas, perfiles: A.perfiles, ts: A.ultima, rol: A.rol });
   }catch(e){
     A.enLinea = false;
     if(!silencioso) avisar("Sin conexión: mostrando la última copia");
@@ -542,6 +548,7 @@ async function usarCache(){
   A.modelos = c.modelos || []; A.proveedores = c.proveedores || [];
   A.unidades = c.unidades || []; A.movs = c.movs || []; A.dispo = c.dispo || []; A.facturas = c.facturas || [];
   A.cotizaciones = c.cotizaciones || []; A.mantenimientos = c.mantenimientos || [];
+  A.tareas = c.tareas || []; A.perfiles = c.perfiles || [];
   A.ultima = c.ts; A.enLinea = false;
   return true;
 }
@@ -549,14 +556,16 @@ async function usarCache(){
 /* ------------------------------------------------------------------ estado */
 const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
-  cotizaciones: [], cot: null, selEq: {}, mantenimientos: [], perfiles: [],
+  cotizaciones: [], cot: null, selEq: {}, mantenimientos: [], perfiles: [], tareas: [],
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
-  vista: "stock", q: "", filtro: "Todas", filtroModelo: "", filtroTipo: "", filtroSit: {}, soloBajos: false, sinGuardar: false
+  vista: "stock", q: "", filtro: "Todas", filtroModelo: "", filtroTipo: "", filtroSit: {}, filtroPersona: "",
+  soloBajos: false, sinGuardar: false
 };
 const esAdmin = () => A.rol === "admin";
-const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones", mantenimientos: "mantenimientos" };
+const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones", mantenimientos: "mantenimientos",
+  tareas: "tareas" };
 
 const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -764,20 +773,25 @@ const ICO = {
   dispo: "M4 19V5m0 14h16M8 16V9m4 7v-4m4 4V7",
   cuenta: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 21a7 7 0 0114 0",
   cotiza: "M7 3h10v18H7zM10 7h4M10 11h4M10 15h4",
-  taller: "M14.7 6.3a4 4 0 01-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2z"
+  taller: "M14.7 6.3a4 4 0 01-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2z",
+  tareas: "M9 11l2 2 4-4M4 5h16v16H4zM9 3h6v2H9z"
 };
-const NAV_ADMIN = [["stock","Stock"],["equipos","Equipos"],["taller","Taller"],["cotiza","Cotizar"],["proveedores","Proveedores"],["reportes","Reportes"],["ajustes","Ajustes"]];
-const NAV_VEND  = [["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
+const NAV_ADMIN = [["tareas","Tareas"],["taller","Taller"],["proveedores","Proveedores"],["stock","Stock"],
+  ["equipos","Equipos"],["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
+const NAV_VEND  = [["tareas","Tareas"],["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
 const nav = () => esAdmin() ? NAV_ADMIN : NAV_VEND;
 const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", proveedores:"Proveedores",
-  movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
+  movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
 
 function pintarNav(){
   document.getElementById("nav").innerHTML = nav().map(([id,txt]) => {
     const d = ICO[id];
     return (
     '<button data-nav="' + id + '" class="' + (A.vista === id ? "on" : "") + '">' +
+    '<span style="position:relative;display:block">' +
     '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>' +
+    (id === "tareas" && tareasPendientes() ? '<span class="globo">' +
+      (tareasPendientes() > 9 ? "9+" : tareasPendientes()) + '</span>' : "") + '</span>' +
     '<span>' + txt + '</span></button>');
   }).join("");
 }
@@ -2452,6 +2466,182 @@ async function borrarTaller(){
   avisar("Registro eliminado");
 }
 
+/* -------------------------------------------------------------- tareas */
+const PRIORIDADES = ["Alta", "Normal", "Baja"];
+const CLASE_PRIO = { "Alta": "pt-baja", "Normal": "pt-res", "Baja": "pt-ent" };
+const pendiente = t => t.estado !== "Hecha";
+const vencida = t => pendiente(t) && t.vence && String(t.vence).slice(0, 10) < hoy();
+const tareasPendientes = () => A.tareas.filter(pendiente).length;
+
+function ordenTareas(a, b){
+  const pa = PRIORIDADES.indexOf(a.prioridad || "Normal"), pb = PRIORIDADES.indexOf(b.prioridad || "Normal");
+  const va = String(a.vence || "9999"), vb = String(b.vence || "9999");
+  return va.localeCompare(vb) || pa - pb;
+}
+
+function vistaTareas(){
+  const q = A.q.toLowerCase();
+  const f = A.filtro === "Todas" ? "Pendientes" : A.filtro;
+  const chips = '<div class="chips">' + ["Pendientes", "Mías", "Vencidas", "Hechas", "Todo", "Por persona"].map(x =>
+    '<button class="chip ' + (f === x ? "on" : "") + (x === "Vencidas" ? " alerta" : "") +
+    '" data-sit="' + esc(x) + '">' + x + '</button>').join("") + '</div>';
+
+  /* lista de personas a las que se puede asignar */
+  const gente = (A.perfiles || []).slice().sort((a, b) =>
+    String(a.nombre || a.email).localeCompare(String(b.nombre || b.email)));
+  const cuenta = id => A.tareas.filter(t => (id === "" ? !t.asignadoA : t.asignadoA === id));
+  const selPersona = '<label class="f" style="margin-bottom:10px"><span>Responsable</span>' +
+    '<select class="inp" id="t-persona"><option value="">Todos (' + nf.format(A.tareas.filter(pendiente).length) + ' pendientes)</option>' +
+    gente.filter(p => puedeRecibir(p) || cuenta(p.id).length)
+      .map(p => '<option value="' + esc(p.id) + '"' + (A.filtroPersona === p.id ? " selected" : "") + '>' +
+      esc(p.nombre || p.email) + "  (" + cuenta(p.id).filter(pendiente).length + ")" + '</option>').join("") +
+    '<option value="__sin"' + (A.filtroPersona === "__sin" ? " selected" : "") + '>Sin asignar  (' +
+      cuenta("").filter(pendiente).length + ')</option></select></label>';
+
+  let ts = A.tareas.slice().sort(ordenTareas);
+  ts = ts.filter(t => {
+    if(A.filtroPersona === "__sin"){ if(t.asignadoA) return false; }
+    else if(A.filtroPersona && t.asignadoA !== A.filtroPersona) return false;
+    if(f === "Pendientes" && !pendiente(t)) return false;
+    if(f === "Hechas" && pendiente(t)) return false;
+    if(f === "Vencidas" && !vencida(t)) return false;
+    if(f === "Mías" && !(t.asignadoA === Sesion.uid || (!REMOTO && true))) return false;
+    if(!q) return true;
+    return [t.titulo, t.detalle, t.asignadoNombre, t.serie, t.cliente].filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+
+  const resumen = '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+    '<tr><td>Pendientes</td><td>' + nf.format(A.tareas.filter(pendiente).length) + '</td></tr>' +
+    '<tr><td>Vencidas</td><td' + (A.tareas.filter(vencida).length ? ' style="color:var(--rojo)"' : "") + '>' +
+      nf.format(A.tareas.filter(vencida).length) + '</td></tr>' +
+    '<tr><td>Cerradas este mes</td><td>' + nf.format(A.tareas.filter(t => !pendiente(t) &&
+      String(t.cerrada || "").slice(0, 7) === hoy().slice(0, 7)).length) + '</td></tr></table></div>';
+
+  /* agrupado por persona */
+  if(f === "Por persona"){
+    const filas = gente.filter(p => puedeRecibir(p) || cuenta(p.id).length)
+      .map(p => ({ id: p.id, nombre: (p.nombre || p.email) + (p.grupo ? " · " + p.grupo : ""), ts: cuenta(p.id) }));
+    filas.push({ id: "__sin", nombre: "Sin asignar", ts: cuenta("") });
+    const conAlgo = filas.filter(x => x.ts.length);
+    return chips + resumen + (conAlgo.length ? '<div class="lista">' + conAlgo.map(x => {
+      const pend = x.ts.filter(pendiente).length, venc = x.ts.filter(vencida).length;
+      return '<button class="fila" data-persona="' + esc(x.id) + '">' +
+        '<div class="t"><b>' + esc(x.nombre) + '</b><span>' +
+        nf.format(x.ts.length) + " en total · " + nf.format(x.ts.length - pend) + ' cerradas' +
+        (venc ? ' · <span style="color:var(--rojo);font-weight:700">' + venc + ' vencidas</span>' : "") + '</span></div>' +
+        '<div style="text-align:right"><b style="color:' + (venc ? "var(--rojo)" : "var(--azul)") + '">' +
+        nf.format(pend) + '</b><span class="mini" style="display:block">pendientes</span></div></button>';
+    }).join("") + '</div>' : '<p class="mini">Todavía no hay tareas asignadas.</p>');
+  }
+
+  if(!A.tareas.length) return chips + resumen +
+    vacio("Sin tareas", "Anota lo que hay que hacer: llamar a un cliente, instalar un equipo, pedir repuestos.",
+      "Crear tarea", "nueva-tarea");
+  if(!ts.length) return chips + selPersona + resumen + '<p class="mini">Nada con ese filtro.</p>';
+
+  return chips + selPersona + resumen + '<div class="lista">' + ts.slice(0, 200).map(t => {
+    const hecha = !pendiente(t);
+    return '<div class="fila' + (hecha ? '" style="opacity:.6' : "") + '">' +
+      '<button class="marca' + (hecha ? " on" : "") + '" data-hecha="' + t.id + '">' +
+        (hecha ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M5 13l4 4L19 7"/></svg>' : "") + '</button>' +
+      '<button class="t" data-tarea="' + t.id + '" style="text-align:left">' +
+      '<b' + (hecha ? ' style="text-decoration:line-through"' : "") + '>' + esc(t.titulo) + '</b>' +
+      '<span>' + (t.asignadoNombre ? esc(t.asignadoNombre) : "sin responsable") +
+        (t.vence ? ' · <span style="' + (vencida(t) ? "color:var(--rojo);font-weight:700" : "") + '">' +
+          (vencida(t) ? "venció " : "vence ") + fechaCorta(t.vence) + '</span>' : "") +
+        (t.serie ? " · " + esc(t.serie) : "") + (t.cliente ? " · " + esc(t.cliente) : "") + '</span></button>' +
+      (t.prioridad && t.prioridad !== "Normal"
+        ? '<span class="pt ' + (CLASE_PRIO[t.prioridad] || "pt-res") + '">' + esc(t.prioridad) + '</span>' : "") +
+      '</div>';
+  }).join("") + '</div>';
+}
+
+function modalTarea(id){
+  const t = id ? A.tareas.find(x => x.id === id) : null;
+  ctx = { tipo: "tarea", id: id || null };
+  const g = k => t && t[k] != null ? t[k] : "";
+  const actual = t ? t.asignadoA : Sesion.uid;
+  const yo = (A.perfiles || []).find(p => p.id === Sesion.uid);
+  abrirModal(
+    '<label class="f"><span>Qué hay que hacer</span><input class="inp" id="t2-titulo" value="' + esc(g("titulo")) +
+      '" placeholder="Llamar a Copefrut por la renovación"></label>' +
+    '<label class="f"><span>Detalle</span><textarea class="inp" id="t2-detalle" rows="2">' + esc(g("detalle")) + '</textarea></label>' +
+    '<div class="f2"><label class="f"><span>Responsable</span><select class="inp" id="t2-asignado">' +
+      '<option value="">Sin asignar</option>' +
+      (asignables().length ? opcionesResponsable(actual)
+        : '<option value="' + esc(Sesion.uid || "") + '" selected>' +
+          esc((yo && (yo.nombre || yo.email)) || Sesion.nombre || Sesion.email || "yo") + '</option>') +
+      (t && t.asignadoA && !asignables().some(p => p.id === t.asignadoA)
+        ? '<option value="' + esc(t.asignadoA) + '" selected>' + esc(t.asignadoNombre || "asignado actual") +
+          '  (ya no recibe tareas)</option>' : "") + '</select></label>' +
+    '<label class="f"><span>Vence</span><input class="inp" id="t2-vence" type="date" value="' + esc(String(g("vence")).slice(0,10)) + '"></label></div>' +
+    '<div class="f2"><label class="f"><span>Prioridad</span><select class="inp" id="t2-prioridad">' +
+      opciones(PRIORIDADES, g("prioridad") || "Normal") + '</select></label>' +
+    '<label class="f"><span>Estado</span><select class="inp" id="t2-estado">' +
+      opciones(["Pendiente", "Hecha"], g("estado") || "Pendiente") + '</select></label></div>' +
+    '<div class="f2"><label class="f"><span>Serie relacionada</span><input class="inp" id="t2-serie" value="' + esc(g("serie")) + '"></label>' +
+    '<label class="f"><span>Cliente</span><input class="inp" id="t2-cliente" list="clientes2" value="' + esc(g("cliente")) + '"></label></div>' +
+    '<datalist id="clientes2">' + [...new Set(A.unidades.map(u => u.cliente).filter(Boolean))].sort().map(c =>
+      '<option value="' + esc(c) + '">').join("") + '</datalist>' +
+    (t ? '<p class="mini" style="margin:0">Creada por ' + esc(t.creadorNombre || "—") +
+      (t.creada ? " el " + fechaCorta(String(t.creada).slice(0,10)) : "") + '</p>' : "") +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-tarea">Guardar</button>' +
+    (t ? '<button class="btn btn-rojo btn-w" data-accion="borrar-tarea">Eliminar</button>' : ""),
+    id ? "Tarea" : "Nueva tarea");
+}
+
+async function guardarTarea(){
+  const titulo = val("t2-titulo");
+  if(!titulo) return avisar("Escribe qué hay que hacer");
+  const asignado = val("t2-asignado");
+  const gente = (A.perfiles || []);
+  const p = gente.find(x => x.id === asignado);
+  const estado = val("t2-estado");
+  const datos = {
+    titulo: titulo, detalle: val("t2-detalle"),
+    asignadoA: asignado || "", asignadoNombre: p ? (p.nombre || p.email) : (asignado === Sesion.uid ? (Sesion.nombre || Sesion.email) : ""),
+    vence: val("t2-vence"), prioridad: val("t2-prioridad"), estado: estado,
+    serie: val("t2-serie"), cliente: val("t2-cliente")
+  };
+  let t;
+  if(ctx.id){
+    t = A.tareas.find(x => x.id === ctx.id);
+    const antes = t.estado;
+    Object.assign(t, datos);
+    if(estado === "Hecha" && antes !== "Hecha") t.cerrada = new Date().toISOString();
+    if(estado !== "Hecha") t.cerrada = "";
+  } else {
+    t = Object.assign({ id: uuid(), creadorId: Sesion.uid || "", creadorNombre: Sesion.nombre || Sesion.email || "local",
+      creada: new Date().toISOString(), cerrada: estado === "Hecha" ? new Date().toISOString() : "" }, datos);
+    A.tareas.unshift(t);
+  }
+  await persistir("tareas", t);
+  registrar((ctx.id ? "Tarea editada: " : "Tarea creada: ") + t.titulo +
+    (t.asignadoNombre ? " · " + t.asignadoNombre : ""), t.serie || "");
+  cerrarModal(); pintar();
+  avisar(ctx.id ? "Tarea actualizada" : "Tarea creada");
+}
+
+async function marcarTarea(id){
+  const t = A.tareas.find(x => x.id === id);
+  if(!t) return;
+  t.estado = pendiente(t) ? "Hecha" : "Pendiente";
+  t.cerrada = t.estado === "Hecha" ? new Date().toISOString() : "";
+  await persistir("tareas", t);
+  registrar((t.estado === "Hecha" ? "Tarea completada: " : "Tarea reabierta: ") + t.titulo, t.serie || "");
+  pintar();
+  avisar(t.estado === "Hecha" ? "Tarea lista" : "Tarea reabierta");
+}
+
+async function borrarTarea(){
+  const t = A.tareas.find(x => x.id === ctx.id);
+  A.tareas = A.tareas.filter(x => x.id !== ctx.id);
+  await borrarFila("tareas", ctx.id);
+  registrar("Tarea eliminada: " + (t ? t.titulo : ""), "");
+  cerrarModal(); pintar();
+  avisar("Tarea eliminada");
+}
+
 function pintar(){
   if(!nav().some(n => n[0] === A.vista) && A.vista !== "cotiza") A.vista = "stock";
   const nombreRep = (REPORTES.find(x => x[0] === A.rep.tipo) || ["", ""])[1];
@@ -2459,10 +2649,11 @@ function pintar(){
     A.vista === "reportes" ? "Reportes · " + nombreRep
     : esAdmin() ? TITULOS[A.vista]
     : (A.vista === "stock" ? "Catálogo" : TITULOS[A.vista]);
-  document.getElementById("fab").hidden = !esAdmin() || ["movs","ajustes","cotiza","reportes"].indexOf(A.vista) >= 0;
+  document.getElementById("fab").hidden = (!esAdmin() && A.vista !== "tareas") ||
+    ["movs","ajustes","cotiza","reportes"].indexOf(A.vista) >= 0;
   const v = { stock: vistaStock, equipos: vistaEquipos, proveedores: vistaProveedores, movs: vistaMovs,
     ajustes: vistaAjustes, dispo: vistaDisponibilidad, cuenta: vistaCuenta, cotiza: vistaCotizador,
-    reportes: vistaReportes, taller: vistaTaller }[A.vista];
+    reportes: vistaReportes, taller: vistaTaller, tareas: vistaTareas }[A.vista];
   document.getElementById("vista").innerHTML =
     (!REMOTO && location.protocol.indexOf("http") === 0
       ? '<div class="aviso" style="margin-top:14px;background:#fff4e0;color:#a76a00">' +
@@ -3508,6 +3699,23 @@ async function deshacerImportacion(){
 /* ------------------------------------------------------------- usuarios */
 const ROLES = ["admin", "vendedor"];
 const nombreRol = r => r === "admin" ? "Administrador" : "Vendedor";
+const puedeRecibir = p => p && p.asignable !== false;
+/* Personas que aparecen en el campo Responsable, ordenadas por grupo y nombre. */
+function asignables(){
+  return (A.perfiles || []).filter(puedeRecibir).slice().sort((a, b) =>
+    String(a.grupo || "~").localeCompare(String(b.grupo || "~")) ||
+    String(a.nombre || a.email).localeCompare(String(b.nombre || b.email)));
+}
+function opcionesResponsable(sel){
+  const gente = asignables();
+  const grupos = [...new Set(gente.map(p => p.grupo || ""))];
+  return grupos.map(g => {
+    const ops = gente.filter(p => (p.grupo || "") === g).map(p =>
+      '<option value="' + esc(p.id) + '"' + (p.id === sel ? " selected" : "") + '>' +
+      esc(p.nombre || p.email) + '</option>').join("");
+    return g ? '<optgroup label="' + esc(g) + '">' + ops + '</optgroup>' : ops;
+  }).join("");
+}
 
 async function cargarPerfiles(){
   if(!REMOTO) return [];
@@ -3533,18 +3741,12 @@ function pintarUsuarios(){
       ((ps.length - admins) === 1 ? " vendedor" : " vendedores") + '</span></div></div>' +
 
     (ps.length ? '<div class="lista">' + ps.map(p =>
-      '<div class="fila"><div class="t"><b>' + esc(p.nombre || p.email) +
+      '<button class="fila" data-usuario="' + esc(p.id) + '"><div class="t"><b>' + esc(p.nombre || p.email) +
         (p.id === Sesion.uid ? ' <span class="mini">(tú)</span>' : "") + '</b>' +
-        '<span>' + esc(p.email || "") + '</span></div>' +
-      '<select class="inp" style="width:auto;padding:6px 8px;font-size:12px" data-rolde="' + esc(p.id) + '">' +
-        ROLES.map(r => '<option value="' + r + '"' + (p.rol === r ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
-      '</select>' +
-      (p.id === Sesion.uid ? "" :
-        '<button data-borraruser="' + esc(p.id) + '" title="Eliminar" ' +
-        'style="color:var(--rojo);padding:0 4px">' +
-        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-        '<path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button>') +
-      '</div>').join("") + '</div>' : '<p class="mini">Todavía no hay perfiles cargados.</p>') +
+        '<span>' + esc(p.email || "") + (p.grupo ? " · " + esc(p.grupo) : "") +
+        (puedeRecibir(p) ? "" : ' · <span style="color:#a76a00">no recibe tareas</span>') + '</span></div>' +
+      '<span class="pt ' + (p.rol === "admin" ? "pt-res" : "pt-ent") + '">' + nombreRol(p.rol) + '</span>' +
+      '</button>').join("") + '</div>' : '<p class="mini">Todavía no hay perfiles cargados.</p>') +
 
     '<div class="sec">Invitar a alguien</div>' +
     '<div class="f2"><label class="f"><span>Correo</span><input class="inp" id="us-email" type="email" placeholder="nombre@rexmas.com"></label>' +
@@ -3571,6 +3773,57 @@ async function cambiarRol(id, rol){
     avisar((p.nombre || p.email) + " ahora es " + nombreRol(rol).toLowerCase());
   }catch(e){ p.rol = antes; fallo(e, "perfiles"); }
   pintarUsuarios();
+}
+
+function modalUsuario(id){
+  const p = (A.perfiles || []).find(x => x.id === id);
+  if(!p) return;
+  ctx = { tipo: "usuario", id: id };
+  const grupos = [...new Set((A.perfiles || []).map(x => x.grupo).filter(Boolean))].sort();
+  abrirModal(
+    '<div class="fila" style="display:block"><div class="t"><b>' + esc(p.nombre || p.email) + '</b>' +
+      '<span>' + esc(p.email || "") + '</span></div></div>' +
+    '<label class="f"><span>Nombre</span><input class="inp" id="u-nombre" value="' + esc(p.nombre || "") + '"></label>' +
+    '<div class="f2"><label class="f"><span>Rol</span><select class="inp" id="u-rol">' +
+      ROLES.map(r => '<option value="' + r + '"' + (p.rol === r ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
+      '</select></label>' +
+    '<label class="f"><span>Recibe tareas</span><select class="inp" id="u-asignable">' +
+      opciones(["Sí", "No"], puedeRecibir(p) ? "Sí" : "No") + '</select></label></div>' +
+    '<label class="f"><span>Grupo</span><input class="inp" id="u-grupo" list="grupos" value="' + esc(p.grupo || "") +
+      '" placeholder="Técnicos, Comercial, Bodega"></label>' +
+    '<datalist id="grupos">' + grupos.map(g => '<option value="' + esc(g) + '">').join("") + '</datalist>' +
+    '<p class="mini" style="margin:0">Solo las personas que reciben tareas aparecen en el campo Responsable. ' +
+    'El grupo las ordena dentro de esa lista.</p>' +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-usuario">Guardar</button>' +
+    (p.id === Sesion.uid ? '<p class="mini" style="margin:0">Es tu propia cuenta, no se puede eliminar.</p>'
+      : '<button class="btn btn-rojo btn-w" data-accion="borrar-usuario-conf">Eliminar la cuenta</button>'),
+    "Usuario");
+}
+
+async function guardarUsuario(){
+  const p = (A.perfiles || []).find(x => x.id === ctx.id);
+  if(!p) return cerrarModal();
+  const rol = val("u-rol");
+  if(p.rol === "admin" && rol !== "admin" &&
+     (A.perfiles || []).filter(x => x.rol === "admin").length <= 1)
+    return avisar("Debe quedar al menos un administrador");
+  const antes = { rol: p.rol, asignable: p.asignable, grupo: p.grupo, nombre: p.nombre };
+  p.nombre = val("u-nombre") || p.nombre;
+  p.rol = rol;
+  p.asignable = val("u-asignable") !== "No";
+  p.grupo = val("u-grupo");
+  try{
+    await API.req("PATCH", "perfiles?id=eq." + encodeURIComponent(p.id),
+      { nombre: p.nombre, rol: p.rol, asignable: p.asignable, grupo: p.grupo || null }, "return=minimal");
+    const cambios = [];
+    if(antes.rol !== p.rol) cambios.push(nombreRol(antes.rol) + " → " + nombreRol(p.rol));
+    if(antes.asignable !== p.asignable) cambios.push(p.asignable ? "recibe tareas" : "no recibe tareas");
+    if((antes.grupo || "") !== (p.grupo || "")) cambios.push("grupo " + (p.grupo || "sin grupo"));
+    if(cambios.length) registrar("Usuario " + (p.nombre || p.email) + ": " + cambios.join(", "), "");
+  }catch(e){ Object.assign(p, antes); fallo(e, "perfiles"); }
+  cerrarModal();
+  await modalUsuarios();
+  avisar("Usuario actualizado");
 }
 
 function modalBorrarUsuario(id){
@@ -3812,14 +4065,14 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-borraruser]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona]");
   if(!t) return;
   const d = t.dataset;
 
   if(d.velo && ev.target === t) return cerrarModal();
   if(d.cerrar) return cerrarModal();
 
-  if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.filtroTipo = ""; A.filtroSit = {};
+  if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.filtroTipo = ""; A.filtroSit = {}; A.filtroPersona = "";
     A.soloBajos = false; A.q = ""; document.getElementById("q").value = ""; return pintar(); }
   if(d.cat){ A.filtro = d.cat; return pintar(); }
   if(d.sit){ A.filtro = d.sit; return pintar(); }
@@ -3854,7 +4107,10 @@ document.addEventListener("click", async ev => {
     return pintar();
   }
   if(d.mant) return modalTaller(d.mant);
-  if(d.borraruser) return modalBorrarUsuario(d.borraruser);
+  if(d.usuario) return modalUsuario(d.usuario);
+  if(d.persona){ A.filtroPersona = d.persona; A.filtro = "Todo"; return pintar(); }
+  if(d.tarea) return modalTarea(d.tarea);
+  if(d.hecha) return marcarTarea(d.hecha);
   if(d.seleq){ A.selEq[d.seleq] = !A.selEq[d.seleq]; return pintar(); }
   if(d.vaciarmod){ ctx.sel[d.vaciarmod] = !ctx.sel[d.vaciarmod]; return pintarVaciar(); }
   if(d.selfila){
@@ -3868,6 +4124,7 @@ document.addEventListener("click", async ev => {
   if(d.abrir === "nueva-unidad") return modalIngreso(null);
   if(d.abrir === "nuevo-proveedor") return modalProveedor(null);
   if(d.abrir === "nuevo-taller") return modalNuevoTaller("");
+  if(d.abrir === "nueva-tarea") return modalTarea(null);
 
   const a = d.accion;
   if(a === "entrar") return entrar();
@@ -4055,6 +4312,8 @@ document.addEventListener("click", async ev => {
     return;
   }
   if(a === "pdf-reparacion") return reparacionPDF();
+  if(a === "guardar-tarea") return guardarTarea();
+  if(a === "borrar-tarea") return borrarTarea();
   if(a === "guardar-taller") return guardarTaller("");
   if(a === "cerrar-reparado") return guardarTaller("reparado");
   if(a === "cerrar-devuelto") return guardarTaller("devuelto");
@@ -4079,6 +4338,8 @@ document.addEventListener("click", async ev => {
   if(a === "confirmar-deshacer") return deshacerImportacion();
   if(a === "usuarios") return modalUsuarios();
   if(a === "invitar-usuario") return invitarUsuario();
+  if(a === "guardar-usuario") return guardarUsuario();
+  if(a === "borrar-usuario-conf") return modalBorrarUsuario(ctx.id);
   if(a === "confirmar-borrar-usuario") return borrarUsuario();
   if(a === "conectar") return modalConexion();
   if(a === "guardar-conexion") return guardarConexion();
@@ -4115,6 +4376,7 @@ document.addEventListener("change", async ev => {
   }
   if(ev.target.id === "eq-modelo"){ A.filtroModelo = ev.target.value; return pintar(); }
   if(ev.target.id === "eq-tipo"){ A.filtroTipo = ev.target.value; return pintar(); }
+  if(ev.target.id === "t-persona"){ A.filtroPersona = ev.target.value; return pintar(); }
   if(ev.target.dataset && ev.target.dataset.rolde) return cambiarRol(ev.target.dataset.rolde, ev.target.value);
   if(ev.target.id && ev.target.id.indexOf("r-") === 0){
     const v = ev.target.value;
@@ -4175,6 +4437,7 @@ document.addEventListener("change", async ev => {
 document.getElementById("q").addEventListener("input", e => { A.q = e.target.value.trim(); pintar(); });
 document.getElementById("fab").addEventListener("click", () => {
   if(A.vista === "proveedores") return modalProveedor(null);
+  if(A.vista === "tareas") return modalTarea(null);
   if(A.vista === "taller") return modalNuevoTaller("");
   if(A.vista === "equipos") return modalIngreso(null);
   return modalModelo(null);
@@ -4329,6 +4592,7 @@ function vigilar(){
     A.facturas = (await Store.get("facturas")) || [];
     A.cotizaciones = (await Store.get("cotizaciones")) || [];
     A.mantenimientos = (await Store.get("mantenimientos")) || [];
+    A.tareas = (await Store.get("tareas")) || [];
     pintar();
     for(const m of A.modelos){ await cargarFotosModelo(m); }
     pintar();
