@@ -70,6 +70,8 @@ header{background:#fff;border-bottom:1px solid var(--linea);position:sticky;top:
 .fila .t{flex:1;min-width:0}
 .fila .t b{display:block;color:var(--azul);font-size:14px}
 .fila .t span{font-size:12px;color:var(--n500);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fila .t span.detalle{white-space:normal;text-overflow:clip;color:var(--n700);font-size:12.5px;line-height:1.35;
+  margin-top:3px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical}
 .pt{font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px;white-space:nowrap}
 .pt-disp{background:var(--lima-soft);color:var(--lima-texto)}
 .pt-ent{background:#eef1f5;color:var(--n500)}
@@ -2549,77 +2551,149 @@ function vistaTareas(){
       '<span>' + (t.asignadoNombre ? esc(t.asignadoNombre) : "sin responsable") +
         (t.vence ? ' · <span style="' + (vencida(t) ? "color:var(--rojo);font-weight:700" : "") + '">' +
           (vencida(t) ? "venció " : "vence ") + fechaCorta(t.vence) + '</span>' : "") +
-        (t.serie ? " · " + esc(t.serie) : "") + (t.cliente ? " · " + esc(t.cliente) : "") + '</span></button>' +
+        (t.serie ? " · " + esc(t.serie) : "") + (t.cliente ? " · " + esc(t.cliente) : "") + '</span>' +
+      (t.detalle ? '<span class="detalle">' + esc(t.detalle).replace(/\n/g, "<br>") + '</span>' : "") +
+      (t.solucion ? '<span class="detalle" style="color:var(--lima-texto);-webkit-line-clamp:2">Solución: ' +
+        esc(t.solucion).replace(/\n/g, "<br>") + '</span>' : "") +
+      '</button>' +
       (t.prioridad && t.prioridad !== "Normal"
         ? '<span class="pt ' + (CLASE_PRIO[t.prioridad] || "pt-res") + '">' + esc(t.prioridad) + '</span>' : "") +
       '</div>';
   }).join("") + '</div>';
 }
 
+/* --- tarea: se crea una vez y después solo se le agrega la solución --- */
 function modalTarea(id){
-  const t = id ? A.tareas.find(x => x.id === id) : null;
-  ctx = { tipo: "tarea", id: id || null };
-  const g = k => t && t[k] != null ? t[k] : "";
-  const actual = t ? t.asignadoA : Sesion.uid;
-  const yo = (A.perfiles || []).find(p => p.id === Sesion.uid);
-  abrirModal(
-    '<label class="f"><span>Qué hay que hacer</span><input class="inp" id="t2-titulo" value="' + esc(g("titulo")) +
-      '" placeholder="Llamar a Copefrut por la renovación"></label>' +
-    '<label class="f"><span>Detalle</span><textarea class="inp" id="t2-detalle" rows="2">' + esc(g("detalle")) + '</textarea></label>' +
-    '<div class="f2"><label class="f"><span>Responsable</span><select class="inp" id="t2-asignado">' +
-      '<option value="">Sin asignar</option>' +
-      (asignables().length ? opcionesResponsable(actual)
-        : '<option value="' + esc(Sesion.uid || "") + '" selected>' +
-          esc((yo && (yo.nombre || yo.email)) || Sesion.nombre || Sesion.email || "yo") + '</option>') +
-      (t && t.asignadoA && !asignables().some(p => p.id === t.asignadoA)
-        ? '<option value="' + esc(t.asignadoA) + '" selected>' + esc(t.asignadoNombre || "asignado actual") +
-          '  (ya no recibe tareas)</option>' : "") + '</select></label>' +
-    '<label class="f"><span>Vence</span><input class="inp" id="t2-vence" type="date" value="' + esc(String(g("vence")).slice(0,10)) + '"></label></div>' +
-    '<div class="f2"><label class="f"><span>Prioridad</span><select class="inp" id="t2-prioridad">' +
-      opciones(PRIORIDADES, g("prioridad") || "Normal") + '</select></label>' +
-    '<label class="f"><span>Estado</span><select class="inp" id="t2-estado">' +
-      opciones(["Pendiente", "Hecha"], g("estado") || "Pendiente") + '</select></label></div>' +
-    '<div class="f2"><label class="f"><span>Serie relacionada</span><input class="inp" id="t2-serie" value="' + esc(g("serie")) + '"></label>' +
-    '<label class="f"><span>Cliente</span><input class="inp" id="t2-cliente" list="clientes2" value="' + esc(g("cliente")) + '"></label></div>' +
-    '<datalist id="clientes2">' + [...new Set(A.unidades.map(u => u.cliente).filter(Boolean))].sort().map(c =>
-      '<option value="' + esc(c) + '">').join("") + '</datalist>' +
-    (t ? '<p class="mini" style="margin:0">Creada por ' + esc(t.creadorNombre || "—") +
-      (t.creada ? " el " + fechaCorta(String(t.creada).slice(0,10)) : "") + '</p>' : "") +
-    '<button class="btn btn-celeste btn-w" data-accion="guardar-tarea">Guardar</button>' +
-    (t ? '<button class="btn btn-rojo btn-w" data-accion="borrar-tarea">Eliminar</button>' : ""),
-    id ? "Tarea" : "Nueva tarea");
+  if(id) return fichaTarea(id);
+  ctx = { tipo: "tarea-nueva", paso: 1, d: { titulo: "", detalle: "", asignado: Sesion.uid || "",
+    vence: "", prioridad: "Normal", serie: "", cliente: "" } };
+  pintarTareaNueva();
 }
 
-async function guardarTarea(){
-  const titulo = val("t2-titulo");
-  if(!titulo) return avisar("Escribe qué hay que hacer");
-  const asignado = val("t2-asignado");
-  const gente = (A.perfiles || []);
-  const p = gente.find(x => x.id === asignado);
-  const estado = val("t2-estado");
-  const datos = {
-    titulo: titulo, detalle: val("t2-detalle"),
-    asignadoA: asignado || "", asignadoNombre: p ? (p.nombre || p.email) : (asignado === Sesion.uid ? (Sesion.nombre || Sesion.email) : ""),
-    vence: val("t2-vence"), prioridad: val("t2-prioridad"), estado: estado,
-    serie: val("t2-serie"), cliente: val("t2-cliente")
-  };
-  let t;
-  if(ctx.id){
-    t = A.tareas.find(x => x.id === ctx.id);
-    const antes = t.estado;
-    Object.assign(t, datos);
-    if(estado === "Hecha" && antes !== "Hecha") t.cerrada = new Date().toISOString();
-    if(estado !== "Hecha") t.cerrada = "";
-  } else {
-    t = Object.assign({ id: uuid(), creadorId: Sesion.uid || "", creadorNombre: Sesion.nombre || Sesion.email || "local",
-      creada: new Date().toISOString(), cerrada: estado === "Hecha" ? new Date().toISOString() : "" }, datos);
-    A.tareas.unshift(t);
+function leerTareaNueva(){
+  const v = id => { const e = document.getElementById(id); return e ? e.value : null; };
+  ["titulo", "detalle", "vence", "prioridad", "serie", "cliente"].forEach(k => {
+    if(v("t2-" + k) !== null) ctx.d[k] = v("t2-" + k);
+  });
+  if(v("t2-asignado") !== null) ctx.d.asignado = v("t2-asignado");
+}
+
+function pintarTareaNueva(){
+  const d = ctx.d;
+  const yo = (A.perfiles || []).find(p => p.id === Sesion.uid);
+
+  if(ctx.paso === 2){
+    const p = (A.perfiles || []).find(x => x.id === d.asignado);
+    return abrirModal(
+      '<div class="fila" style="display:block"><div class="t"><b>' + esc(d.titulo) + '</b>' +
+        '<span>' + esc(p ? (p.nombre || p.email) : "sin responsable") +
+        (d.vence ? " · vence " + fechaCorta(d.vence) : " · sin fecha") +
+        (d.prioridad !== "Normal" ? " · prioridad " + esc(d.prioridad) : "") + '</span>' +
+        (d.detalle ? '<span class="detalle">' + esc(d.detalle).replace(/\n/g, "<br>") + '</span>' : "") +
+        ((d.serie || d.cliente) ? '<span>' + esc([d.serie, d.cliente].filter(Boolean).join(" · ")) + '</span>' : "") +
+      '</div></div>' +
+      '<p class="mini" style="margin:0">Una vez creada, el texto de la tarea no se puede cambiar. ' +
+      'Después solo se le agrega la solución y se marca como hecha. Revisa que esté completa.</p>' +
+      '<button class="btn btn-celeste btn-w" data-accion="confirmar-tarea">Confirmar y crear</button>' +
+      '<button class="btn btn-suave btn-w" data-accion="volver-tarea">Volver a editar</button>',
+      "¿Crear esta tarea?");
   }
+
+  abrirModal(
+    '<label class="f"><span>Qué hay que hacer</span><input class="inp" id="t2-titulo" value="' + esc(d.titulo) +
+      '" placeholder="Llamar a Copefrut por la renovación"></label>' +
+    '<label class="f"><span>Detalle</span><textarea class="inp" id="t2-detalle" rows="5" ' +
+      'placeholder="Todo lo que haga falta: qué se acordó, con quién, qué falta por hacer">' + esc(d.detalle) + '</textarea></label>' +
+    '<div class="f2"><label class="f"><span>Responsable</span><select class="inp" id="t2-asignado">' +
+      '<option value="">Sin asignar</option>' +
+      (asignables().length ? opcionesResponsable(d.asignado)
+        : '<option value="' + esc(Sesion.uid || "") + '" selected>' +
+          esc((yo && (yo.nombre || yo.email)) || Sesion.nombre || Sesion.email || "yo") + '</option>') +
+      '</select></label>' +
+    '<label class="f"><span>Vence</span><input class="inp" id="t2-vence" type="date" value="' + esc(d.vence) + '"></label></div>' +
+    '<label class="f"><span>Prioridad</span><select class="inp" id="t2-prioridad">' +
+      opciones(PRIORIDADES, d.prioridad) + '</select></label>' +
+    '<div class="f2"><label class="f"><span>Serie relacionada</span><input class="inp" id="t2-serie" value="' + esc(d.serie) + '"></label>' +
+    '<label class="f"><span>Cliente</span><input class="inp" id="t2-cliente" list="clientes2" value="' + esc(d.cliente) + '"></label></div>' +
+    '<datalist id="clientes2">' + [...new Set(A.unidades.map(u => u.cliente).filter(Boolean))].sort().map(c =>
+      '<option value="' + esc(c) + '">').join("") + '</datalist>' +
+    '<p class="mini" style="margin:0">Después de crearla, el texto queda fijo: solo se podrá registrar la solución.</p>' +
+    '<button class="btn btn-celeste btn-w" data-accion="revisar-tarea">Revisar y crear</button>',
+    "Nueva tarea");
+}
+
+async function crearTarea(){
+  const d = ctx.d;
+  if(!d.titulo) { ctx.paso = 1; pintarTareaNueva(); return avisar("Escribe qué hay que hacer"); }
+  const p = (A.perfiles || []).find(x => x.id === d.asignado);
+  const t = { id: uuid(), titulo: d.titulo, detalle: d.detalle,
+    asignadoA: d.asignado || "", asignadoNombre: p ? (p.nombre || p.email)
+      : (d.asignado === Sesion.uid ? (Sesion.nombre || Sesion.email) : ""),
+    vence: d.vence, prioridad: d.prioridad, estado: "Pendiente",
+    serie: d.serie, cliente: d.cliente, solucion: "",
+    creadorId: Sesion.uid || "", creadorNombre: Sesion.nombre || Sesion.email || "local",
+    creada: new Date().toISOString(), cerrada: "" };
+  A.tareas.unshift(t);
   await persistir("tareas", t);
-  registrar((ctx.id ? "Tarea editada: " : "Tarea creada: ") + t.titulo +
-    (t.asignadoNombre ? " · " + t.asignadoNombre : ""), t.serie || "");
+  registrar("Tarea creada: " + t.titulo + (t.asignadoNombre ? " · " + t.asignadoNombre : ""), t.serie || "");
   cerrarModal(); pintar();
-  avisar(ctx.id ? "Tarea actualizada" : "Tarea creada");
+  avisar("Tarea creada");
+}
+
+/* --- ficha de una tarea ya creada: solo lectura, más la solución --- */
+function fichaTarea(id){
+  const t = A.tareas.find(x => x.id === id);
+  if(!t) return;
+  ctx = { tipo: "tarea", id: id };
+  pintarFichaTarea();
+}
+
+function pintarFichaTarea(){
+  const t = A.tareas.find(x => x.id === ctx.id);
+  const hecha = !pendiente(t);
+  const puedeBorrar = esAdmin() || t.creadorId === Sesion.uid || !REMOTO;
+  abrirModal(
+    '<div class="fila" style="display:block;background:var(--fondo)"><div class="t">' +
+      '<b style="font-size:15px">' + esc(t.titulo) + '</b>' +
+      '<span>' + esc(t.asignadoNombre || "sin responsable") +
+      (t.vence ? ' · <span style="' + (vencida(t) ? "color:var(--rojo);font-weight:700" : "") + '">' +
+        (vencida(t) ? "venció " : "vence ") + fechaCorta(t.vence) + '</span>' : " · sin fecha") +
+      (t.prioridad && t.prioridad !== "Normal" ? " · prioridad " + esc(t.prioridad) : "") + '</span>' +
+      ((t.serie || t.cliente) ? '<span>' + esc([t.serie, t.cliente].filter(Boolean).join(" · ")) + '</span>' : "") +
+      '</div><span class="pt ' + (hecha ? "pt-disp" : "pt-rev") + '">' + esc(t.estado) + '</span></div>' +
+
+    (t.detalle ? '<div><div class="sec">Detalle</div>' +
+      '<div class="fila" style="display:block"><div class="t"><span class="detalle" style="-webkit-line-clamp:99">' +
+      esc(t.detalle).replace(/\n/g, "<br>") + '</span></div></div></div>' : "") +
+
+    '<div class="sec">Solución</div>' +
+    '<label class="f"><span>Cómo se resolvió o en qué va</span>' +
+    '<textarea class="inp" id="t3-solucion" rows="5" placeholder="Qué se hizo, con quién se habló, qué quedó pendiente">' +
+      esc(t.solucion || "") + '</textarea></label>' +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-solucion">Guardar la solución</button>' +
+    (hecha
+      ? '<button class="btn btn-linea btn-w" data-accion="reabrir-tarea">Reabrir la tarea</button>'
+      : '<button class="btn btn-azul btn-w" data-accion="cerrar-tarea">Guardar y marcar como hecha</button>') +
+
+    '<p class="mini" style="margin:0">Creada por ' + esc(t.creadorNombre || "—") +
+      (t.creada ? " el " + fechaCorta(String(t.creada).slice(0, 10)) : "") +
+      (t.cerrada ? " · cerrada el " + fechaCorta(String(t.cerrada).slice(0, 10)) : "") +
+      '. El texto original no se modifica.</p>' +
+    (puedeBorrar ? '<button class="btn btn-rojo btn-w" data-accion="borrar-tarea">Eliminar la tarea</button>' : ""),
+    "Tarea");
+}
+
+async function guardarSolucion(cerrar){
+  const t = A.tareas.find(x => x.id === ctx.id);
+  const e = document.getElementById("t3-solucion");
+  if(e) t.solucion = e.value;
+  if(cerrar === "cerrar"){ t.estado = "Hecha"; t.cerrada = new Date().toISOString(); }
+  if(cerrar === "reabrir"){ t.estado = "Pendiente"; t.cerrada = ""; }
+  await persistir("tareas", t);
+  registrar((cerrar === "cerrar" ? "Tarea completada: " : cerrar === "reabrir" ? "Tarea reabierta: " : "Solución registrada: ") +
+    t.titulo, t.serie || "");
+  cerrarModal(); pintar();
+  avisar(cerrar === "cerrar" ? "Tarea lista" : cerrar === "reabrir" ? "Tarea reabierta" : "Solución guardada");
 }
 
 async function marcarTarea(id){
@@ -4312,7 +4386,12 @@ document.addEventListener("click", async ev => {
     return;
   }
   if(a === "pdf-reparacion") return reparacionPDF();
-  if(a === "guardar-tarea") return guardarTarea();
+  if(a === "revisar-tarea"){ leerTareaNueva(); ctx.paso = 2; return pintarTareaNueva(); }
+  if(a === "volver-tarea"){ ctx.paso = 1; return pintarTareaNueva(); }
+  if(a === "confirmar-tarea") return crearTarea();
+  if(a === "guardar-solucion") return guardarSolucion("");
+  if(a === "cerrar-tarea") return guardarSolucion("cerrar");
+  if(a === "reabrir-tarea") return guardarSolucion("reabrir");
   if(a === "borrar-tarea") return borrarTarea();
   if(a === "guardar-taller") return guardarTaller("");
   if(a === "cerrar-reparado") return guardarTaller("reparado");
