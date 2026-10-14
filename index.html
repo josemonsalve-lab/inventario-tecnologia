@@ -520,6 +520,16 @@ async function traerTodo(tabla, consulta){
 async function sincronizar(silencioso){
   if(!REMOTO) return;
   try{
+    /* el rol puede haber cambiado en la base: se refresca sin cerrar sesión */
+    if(Sesion.uid && (!A.ultimoPerfil || Date.now() - A.ultimoPerfil > 60000)){
+      try{
+        const antes = A.rol;
+        await API.perfil();
+        A.rol = Sesion.rol;
+        A.ultimoPerfil = Date.now();
+        if(antes !== A.rol) avisar("Tu perfil ahora es " + nombreRol(A.rol).toLowerCase());
+      }catch(e){}
+    }
     A.modelos = (await traerTodo("modelos", "select=*&order=codigo")).map(f => deFila("modelos", f));
     A.proveedores = (await traerTodo("proveedores", "select=*&order=nombre")).map(f => deFila("proveedores", f));
     if(A.rol === "admin"){
@@ -781,7 +791,7 @@ const ICO = {
 };
 const NAV_ADMIN = [["tareas","Tareas"],["taller","Taller"],["proveedores","Proveedores"],["stock","Stock"],
   ["equipos","Equipos"],["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
-const NAV_VEND  = [["tareas","Tareas"],["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
+const NAV_VEND  = [["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
 const nav = () => esAdmin() ? NAV_ADMIN : NAV_VEND;
 const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", proveedores:"Proveedores",
   movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
@@ -982,7 +992,7 @@ function vistaCuenta(){
   return '<div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">' +
     '<div class="fila"><div class="t"><b>' + esc(Sesion.nombre || "Usuario local") + '</b>' +
     '<span>' + esc(Sesion.email || "sin sesión") + '</span>' +
-    '<span>Perfil: ' + (esAdmin() ? "administrador" : "vendedor, solo consulta") + '</span></div></div>' +
+    '<span>Perfil: ' + esc(nombreRol(A.rol)) + (esAdmin() ? "" : ", solo consulta") + '</span></div></div>' +
     '<div class="fila"><div class="t"><b>' + (!REMOTO ? "Datos en este dispositivo" : A.enLinea ? "Conectado al inventario" : "Sin conexión") + '</b>' +
     '<span>' + (A.ultima ? "Última actualización: " + new Date(A.ultima).toLocaleString("es-CL")
       : REMOTO ? "Nunca" : "Sin base compartida configurada") + '</span></div></div>' +
@@ -1020,13 +1030,14 @@ function vistaAjustes(){
     '<button class="btn btn-linea btn-w" data-accion="exportar">Exportar todo a CSV</button>' +
     (esSuper()
       ? '<div class="sec">Acciones del super administrador</div>' +
-        (ultimaImportacion() ? '<button class="btn btn-rojo btn-w" data-accion="deshacer-importacion">' +
-          'Deshacer última importación (' + nf.format(ultimaImportacion().n) + ' equipos)</button>' : "") +
-        (A.unidades.length ? '<button class="btn btn-rojo btn-w" data-accion="vaciar-equipos">' +
-          'Vaciar equipos y mantener el catálogo</button>' : "") +
+        '<button class="btn btn-rojo btn-w" data-accion="vaciar-equipos"' + (A.unidades.length ? "" : " disabled") + '>' +
+          'Vaciar equipos y mantener el catálogo' + (A.unidades.length ? "" : " · no hay equipos") + '</button>' +
+        '<button class="btn btn-rojo btn-w" data-accion="deshacer-importacion"' + (ultimaImportacion() ? "" : " disabled") + '>' +
+          (ultimaImportacion() ? 'Deshacer última importación (' + nf.format(ultimaImportacion().n) + ' equipos)'
+            : 'Deshacer última importación · ninguna marcada') + '</button>' +
         '<button class="btn btn-rojo btn-w" data-accion="borrar">Borrar todos los datos</button>'
       : '<p class="mini" style="margin:10px 0 0">Vaciar equipos, deshacer importaciones y borrar datos ' +
-        'quedan reservados al super administrador.</p>') +
+        'quedan reservados al super administrador. Tu perfil es ' + esc(nombreRol(A.rol).toLowerCase()) + '.</p>') +
     '<div class="sec">Conexión</div>' +
     '<div class="fila"><div class="t"><b>' + (REMOTO ? esc(CFG.url) : "Sin conexión: modo local") + '</b>' +
       '<span>' + (REMOTO ? "Inventario compartido" : "Los datos quedan en este dispositivo") + '</span></div></div>' +
@@ -1036,7 +1047,8 @@ function vistaAjustes(){
       '<button class="btn btn-linea btn-w" data-accion="usuarios">Administrar usuarios e invitaciones</button>' : "") +
     '<div class="sec">Sesión</div>' +
     '<div class="fila"><div class="t"><b>' + esc(Sesion.nombre || "Usuario local") + '</b><span>' +
-      esc(Sesion.email || "modo local, sin cuentas") + ' · ' + (esAdmin() ? "administrador" : "vendedor") + '</span></div></div>' +
+      esc(Sesion.email || "modo local, sin cuentas") + ' · ' + esc(nombreRol(A.rol)) + '</span></div></div>' +
+    (REMOTO ? '<button class="btn btn-suave btn-w" data-accion="refrescar-rol">Actualizar mi rol</button>' : "") +
     (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
             : '<button class="btn btn-linea btn-w" data-accion="ver-vendedor">Ver como vendedor</button>') +
     '<p class="mini" style="text-align:center;margin-top:8px">Los datos viven solo en este teléfono. Exporta cada cierto tiempo si quieres respaldo.</p></div>';
@@ -2783,7 +2795,7 @@ function pintar(){
     A.vista === "reportes" ? "Reportes · " + nombreRep
     : esAdmin() ? TITULOS[A.vista]
     : (A.vista === "stock" ? "Catálogo" : TITULOS[A.vista]);
-  document.getElementById("fab").hidden = (!esAdmin() && A.vista !== "tareas") ||
+  document.getElementById("fab").hidden = !esAdmin() ||
     ["movs","ajustes","cotiza","reportes"].indexOf(A.vista) >= 0;
   const v = { stock: vistaStock, equipos: vistaEquipos, proveedores: vistaProveedores, movs: vistaMovs,
     ajustes: vistaAjustes, dispo: vistaDisponibilidad, cuenta: vistaCuenta, cotiza: vistaCotizador,
@@ -4280,6 +4292,12 @@ document.addEventListener("click", async ev => {
   if(a === "entrar") return entrar();
   if(a === "guardar-clave") return guardarClave();
   if(a === "recuperar") return pedirRecuperacion();
+  if(a === "refrescar-rol"){
+    A.ultimoPerfil = 0;
+    await sincronizar();
+    pintar();
+    return avisar("Tu perfil es " + nombreRol(A.rol).toLowerCase());
+  }
   if(a === "refrescar"){ await actualizarUF(); await sincronizar(); pintar(); return avisar(A.enLinea ? "Inventario actualizado" : "Sin conexión"); }
   if(a === "pedir-salir") return modalConfirmar("Cerrar sesión",
     "Vas a salir de la cuenta <b>" + esc(Sesion.email || "") + "</b> en este dispositivo. " +
