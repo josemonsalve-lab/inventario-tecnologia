@@ -565,7 +565,8 @@ const A = {
   vista: "stock", q: "", filtro: "Todas", filtroModelo: "", filtroTipo: "", filtroSit: {}, filtroPersona: "",
   soloBajos: false, sinGuardar: false
 };
-const esAdmin = () => A.rol === "admin";
+const esAdmin = () => A.rol === "admin" || A.rol === "super";
+const esSuper = () => A.rol === "super";
 const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones", mantenimientos: "mantenimientos",
   tareas: "tareas" };
 
@@ -2565,8 +2566,21 @@ function vistaTareas(){
 /* --- tarea: se crea una vez y después solo se le agrega la solución --- */
 function modalTarea(id){
   if(id) return fichaTarea(id);
-  ctx = { tipo: "tarea-nueva", paso: 1, d: { titulo: "", detalle: "", asignado: Sesion.uid || "",
-    vence: "", prioridad: "Normal", serie: "", cliente: "" } };
+  ctx = { tipo: "tarea-nueva", paso: 1, editarId: null,
+    d: { titulo: "", detalle: "", asignado: Sesion.uid || "",
+         vence: "", prioridad: "Normal", serie: "", cliente: "" } };
+  pintarTareaNueva();
+}
+
+/* El super administrador sí puede corregir una tarea ya creada. */
+function editarTarea(id){
+  const t = A.tareas.find(x => x.id === id);
+  if(!t) return;
+  if(!esSuper()) return avisar("Solo el super administrador puede modificar una tarea creada");
+  ctx = { tipo: "tarea-nueva", paso: 1, editarId: id,
+    d: { titulo: t.titulo || "", detalle: t.detalle || "", asignado: t.asignadoA || "",
+         vence: String(t.vence || "").slice(0, 10), prioridad: t.prioridad || "Normal",
+         serie: t.serie || "", cliente: t.cliente || "" } };
   pintarTareaNueva();
 }
 
@@ -2592,11 +2606,14 @@ function pintarTareaNueva(){
         (d.detalle ? '<span class="detalle">' + esc(d.detalle).replace(/\n/g, "<br>") + '</span>' : "") +
         ((d.serie || d.cliente) ? '<span>' + esc([d.serie, d.cliente].filter(Boolean).join(" · ")) + '</span>' : "") +
       '</div></div>' +
-      '<p class="mini" style="margin:0">Una vez creada, el texto de la tarea no se puede cambiar. ' +
-      'Después solo se le agrega la solución y se marca como hecha. Revisa que esté completa.</p>' +
-      '<button class="btn btn-celeste btn-w" data-accion="confirmar-tarea">Confirmar y crear</button>' +
+      '<p class="mini" style="margin:0">' + (ctx.editarId
+        ? "Queda registrado en el historial quién modificó la tarea y cuándo."
+        : "Una vez creada, el texto de la tarea no se puede cambiar. Después solo se le agrega la solución " +
+          "y se marca como hecha. Revisa que esté completa.") + '</p>' +
+      '<button class="btn btn-celeste btn-w" data-accion="confirmar-tarea">' +
+        (ctx.editarId ? "Guardar los cambios" : "Confirmar y crear") + '</button>' +
       '<button class="btn btn-suave btn-w" data-accion="volver-tarea">Volver a editar</button>',
-      "¿Crear esta tarea?");
+      ctx.editarId ? "¿Guardar los cambios?" : "¿Crear esta tarea?");
   }
 
   abrirModal(
@@ -2617,18 +2634,39 @@ function pintarTareaNueva(){
     '<label class="f"><span>Cliente</span><input class="inp" id="t2-cliente" list="clientes2" value="' + esc(d.cliente) + '"></label></div>' +
     '<datalist id="clientes2">' + [...new Set(A.unidades.map(u => u.cliente).filter(Boolean))].sort().map(c =>
       '<option value="' + esc(c) + '">').join("") + '</datalist>' +
-    '<p class="mini" style="margin:0">Después de crearla, el texto queda fijo: solo se podrá registrar la solución.</p>' +
-    '<button class="btn btn-celeste btn-w" data-accion="revisar-tarea">Revisar y crear</button>',
-    "Nueva tarea");
+    '<p class="mini" style="margin:0">' + (ctx.editarId
+      ? "Estás corrigiendo una tarea ya creada como super administrador."
+      : "Después de crearla, el texto queda fijo: solo se podrá registrar la solución.") + '</p>' +
+    '<button class="btn btn-celeste btn-w" data-accion="revisar-tarea">' +
+      (ctx.editarId ? "Revisar y guardar" : "Revisar y crear") + '</button>',
+    ctx.editarId ? "Modificar tarea" : "Nueva tarea");
 }
 
 async function crearTarea(){
   const d = ctx.d;
   if(!d.titulo) { ctx.paso = 1; pintarTareaNueva(); return avisar("Escribe qué hay que hacer"); }
   const p = (A.perfiles || []).find(x => x.id === d.asignado);
+  const nombreAsignado = p ? (p.nombre || p.email)
+    : (d.asignado === Sesion.uid ? (Sesion.nombre || Sesion.email) : "");
+
+  if(ctx.editarId){                                 // corrección de un super administrador
+    const t = A.tareas.find(x => x.id === ctx.editarId);
+    const cambios = [];
+    if(t.titulo !== d.titulo) cambios.push("título");
+    if((t.detalle || "") !== d.detalle) cambios.push("detalle");
+    if((t.asignadoA || "") !== (d.asignado || "")) cambios.push("responsable a " + (nombreAsignado || "sin asignar"));
+    if(String(t.vence || "").slice(0,10) !== d.vence) cambios.push("fecha");
+    if(t.prioridad !== d.prioridad) cambios.push("prioridad");
+    Object.assign(t, { titulo: d.titulo, detalle: d.detalle, asignadoA: d.asignado || "",
+      asignadoNombre: nombreAsignado, vence: d.vence, prioridad: d.prioridad,
+      serie: d.serie, cliente: d.cliente });
+    await persistir("tareas", t);
+    registrar("Tarea modificada (" + (cambios.join(", ") || "sin cambios") + "): " + t.titulo, t.serie || "");
+    cerrarModal(); pintar();
+    return avisar("Tarea modificada");
+  }
   const t = { id: uuid(), titulo: d.titulo, detalle: d.detalle,
-    asignadoA: d.asignado || "", asignadoNombre: p ? (p.nombre || p.email)
-      : (d.asignado === Sesion.uid ? (Sesion.nombre || Sesion.email) : ""),
+    asignadoA: d.asignado || "", asignadoNombre: nombreAsignado,
     vence: d.vence, prioridad: d.prioridad, estado: "Pendiente",
     serie: d.serie, cliente: d.cliente, solucion: "",
     creadorId: Sesion.uid || "", creadorNombre: Sesion.nombre || Sesion.email || "local",
@@ -2678,7 +2716,9 @@ function pintarFichaTarea(){
     '<p class="mini" style="margin:0">Creada por ' + esc(t.creadorNombre || "—") +
       (t.creada ? " el " + fechaCorta(String(t.creada).slice(0, 10)) : "") +
       (t.cerrada ? " · cerrada el " + fechaCorta(String(t.cerrada).slice(0, 10)) : "") +
-      '. El texto original no se modifica.</p>' +
+      (esSuper() ? "." : ". El texto original no se modifica.") + '</p>' +
+    (esSuper() ? '<button class="btn btn-linea btn-w" data-accion="editar-tarea">' +
+      'Modificar la tarea y el responsable</button>' : "") +
     (puedeBorrar ? '<button class="btn btn-rojo btn-w" data-accion="borrar-tarea">Eliminar la tarea</button>' : ""),
     "Tarea");
 }
@@ -3771,8 +3811,9 @@ async function deshacerImportacion(){
 }
 
 /* ------------------------------------------------------------- usuarios */
-const ROLES = ["admin", "vendedor"];
-const nombreRol = r => r === "admin" ? "Administrador" : "Vendedor";
+const ROLES = ["super", "admin", "vendedor"];
+const nombreRol = r => r === "super" ? "Super administrador" : r === "admin" ? "Administrador" : "Vendedor";
+const mandan = p => p.rol === "admin" || p.rol === "super";
 const puedeRecibir = p => p && p.asignable !== false;
 /* Personas que aparecen en el campo Responsable, ordenadas por grupo y nombre. */
 function asignables(){
@@ -3807,7 +3848,7 @@ async function modalUsuarios(){
 
 function pintarUsuarios(){
   const ps = A.perfiles || [];
-  const admins = ps.filter(p => p.rol === "admin").length;
+  const admins = ps.filter(mandan).length;
   abrirModal(
     '<div class="fila" style="display:block"><div class="t"><b>' + nf.format(ps.length) +
       (ps.length === 1 ? " cuenta" : " cuentas") + '</b><span>' + admins +
@@ -3819,7 +3860,8 @@ function pintarUsuarios(){
         (p.id === Sesion.uid ? ' <span class="mini">(tú)</span>' : "") + '</b>' +
         '<span>' + esc(p.email || "") + (p.grupo ? " · " + esc(p.grupo) : "") +
         (puedeRecibir(p) ? "" : ' · <span style="color:#a76a00">no recibe tareas</span>') + '</span></div>' +
-      '<span class="pt ' + (p.rol === "admin" ? "pt-res" : "pt-ent") + '">' + nombreRol(p.rol) + '</span>' +
+      '<span class="pt ' + (p.rol === "super" ? "pt-rev" : p.rol === "admin" ? "pt-res" : "pt-ent") + '">' +
+      (p.rol === "super" ? "Super" : nombreRol(p.rol)) + '</span>' +
       '</button>').join("") + '</div>' : '<p class="mini">Todavía no hay perfiles cargados.</p>') +
 
     '<div class="sec">Invitar a alguien</div>' +
@@ -3836,8 +3878,7 @@ function pintarUsuarios(){
 async function cambiarRol(id, rol){
   const p = (A.perfiles || []).find(x => x.id === id);
   if(!p || p.rol === rol) return;
-  if(p.rol === "admin" && rol !== "admin" &&
-     (A.perfiles || []).filter(x => x.rol === "admin").length <= 1)
+  if(mandan(p) && !mandan({ rol: rol }) && (A.perfiles || []).filter(mandan).length <= 1)
     return avisar("Debe quedar al menos un administrador");
   const antes = p.rol;
   p.rol = rol;
@@ -3858,8 +3899,10 @@ function modalUsuario(id){
     '<div class="fila" style="display:block"><div class="t"><b>' + esc(p.nombre || p.email) + '</b>' +
       '<span>' + esc(p.email || "") + '</span></div></div>' +
     '<label class="f"><span>Nombre</span><input class="inp" id="u-nombre" value="' + esc(p.nombre || "") + '"></label>' +
-    '<div class="f2"><label class="f"><span>Rol</span><select class="inp" id="u-rol">' +
-      ROLES.map(r => '<option value="' + r + '"' + (p.rol === r ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
+    '<div class="f2"><label class="f"><span>Rol</span><select class="inp" id="u-rol"' +
+      ((p.rol === "super" && !esSuper()) ? " disabled" : "") + '>' +
+      ROLES.filter(r => r !== "super" || esSuper() || p.rol === "super")
+        .map(r => '<option value="' + r + '"' + (p.rol === r ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
       '</select></label>' +
     '<label class="f"><span>Recibe tareas</span><select class="inp" id="u-asignable">' +
       opciones(["Sí", "No"], puedeRecibir(p) ? "Sí" : "No") + '</select></label></div>' +
@@ -3877,9 +3920,11 @@ function modalUsuario(id){
 async function guardarUsuario(){
   const p = (A.perfiles || []).find(x => x.id === ctx.id);
   if(!p) return cerrarModal();
-  const rol = val("u-rol");
-  if(p.rol === "admin" && rol !== "admin" &&
-     (A.perfiles || []).filter(x => x.rol === "admin").length <= 1)
+  const rol = val("u-rol") || p.rol;
+  if(p.rol === "super" && rol !== "super" && !esSuper())
+    return avisar("Solo un super administrador puede cambiar ese rol");
+  if(mandan(p) && !mandan({ rol: rol }) &&
+     (A.perfiles || []).filter(mandan).length <= 1)
     return avisar("Debe quedar al menos un administrador");
   const antes = { rol: p.rol, asignable: p.asignable, grupo: p.grupo, nombre: p.nombre };
   p.nombre = val("u-nombre") || p.nombre;
@@ -3904,8 +3949,10 @@ function modalBorrarUsuario(id){
   const p = (A.perfiles || []).find(x => x.id === id);
   if(!p) return;
   if(p.id === Sesion.uid) return avisar("No puedes eliminar tu propia cuenta");
-  if(p.rol === "admin" && (A.perfiles || []).filter(x => x.rol === "admin").length <= 1)
+  if(mandan(p) && (A.perfiles || []).filter(mandan).length <= 1)
     return avisar("Debe quedar al menos un administrador");
+  if(p.rol === "super" && !esSuper())
+    return avisar("Solo un super administrador puede eliminar a otro");
   ctx = { tipo: "borrar-usuario", id: id };
   abrirModal(
     '<div class="fila" style="display:block"><div class="t"><b>' + esc(p.nombre || p.email) + '</b>' +
@@ -4386,6 +4433,7 @@ document.addEventListener("click", async ev => {
     return;
   }
   if(a === "pdf-reparacion") return reparacionPDF();
+  if(a === "editar-tarea") return editarTarea(ctx.id);
   if(a === "revisar-tarea"){ leerTareaNueva(); ctx.paso = 2; return pintarTareaNueva(); }
   if(a === "volver-tarea"){ ctx.paso = 1; return pintarTareaNueva(); }
   if(a === "confirmar-tarea") return crearTarea();
