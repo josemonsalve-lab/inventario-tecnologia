@@ -305,7 +305,7 @@ const MAPA = {
   facturas: { proveedorId: "proveedor_id" },
   mantenimientos: { unidadId: "unidad_id", fechaIngreso: "fecha_ingreso", fechaSalida: "fecha_salida" },
   tareas: { asignadoA: "asignado_a", asignadoNombre: "asignado_nombre", creadorId: "creador_id",
-    creadorNombre: "creador_nombre" },
+    creadorNombre: "creador_nombre", zohoId: "zoho_id", zohoSync: "zoho_sync" },
   cotizaciones: { usuarioId: "usuario_id", usuarioEmail: "usuario_email", envioUF: "envio_uf",
     instalacionUF: "instalacion_uf", totalUF: "total_uf" },
   proveedores: {}, movimientos: {}, fotos: {}
@@ -544,6 +544,14 @@ async function sincronizar(silencioso){
     }
     A.cotizaciones = (await traerTodo("cotizaciones", "select=*&order=creada.desc")).map(f => deFila("cotizaciones", f));
     A.tareas = (await traerTodo("tareas", "select=*&order=creada.desc")).map(f => deFila("tareas", f));
+    if(esAdmin()){
+      try{
+        const filas = (await API.req("GET", "integraciones?select=clave,valor")) || [];
+        const c = {}; for(const f of filas) c[f.clave] = f.valor || "";
+        A.zoho.activo = !!(c.zoho_portal && c.zoho_proyecto);
+        A.zoho.ultima = c.zoho_ultima_sync || "";
+      }catch(e){}
+    }
     if(!A.perfiles.length) A.perfiles = await cargarPerfiles();
     A.ultima = Date.now(); A.enLinea = true;
     await Store.set("cache", { modelos: A.modelos, proveedores: A.proveedores, unidades: A.unidades,
@@ -569,6 +577,7 @@ async function usarCache(){
 const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
   cotizaciones: [], cot: null, selEq: {}, mantenimientos: [], perfiles: [], tareas: [],
+  zoho: { activo: false, ultima: "" },
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
@@ -997,7 +1006,8 @@ function vistaCuenta(){
     '<span>' + (A.ultima ? "Última actualización: " + new Date(A.ultima).toLocaleString("es-CL")
       : REMOTO ? "Nunca" : "Sin base compartida configurada") + '</span></div></div>' +
     '<button class="btn btn-linea btn-w" data-accion="refrescar">Actualizar ahora</button>' +
-    (REMOTO ? '<button class="btn btn-rojo btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
+    (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="cambiar-clave">Cambiar mi contraseña</button>' +
+      '<button class="btn btn-rojo btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
             : '<button class="btn btn-linea btn-w" data-accion="ver-vendedor">Volver a vista de administrador</button>') +
     '</div>';
 }
@@ -1038,6 +1048,8 @@ function vistaAjustes(){
         '<button class="btn btn-rojo btn-w" data-accion="borrar">Borrar todos los datos</button>'
       : '<p class="mini" style="margin:10px 0 0">Vaciar equipos, deshacer importaciones y borrar datos ' +
         'quedan reservados al super administrador. Tu perfil es ' + esc(nombreRol(A.rol).toLowerCase()) + '.</p>') +
+    (REMOTO ? '<div class="sec">Zoho Projects</div>' +
+      '<button class="btn btn-linea btn-w" data-accion="zoho">Sincronizar tareas con Zoho</button>' : "") +
     '<div class="sec">Conexión</div>' +
     '<div class="fila"><div class="t"><b>' + (REMOTO ? esc(CFG.url) : "Sin conexión: modo local") + '</b>' +
       '<span>' + (REMOTO ? "Inventario compartido" : "Los datos quedan en este dispositivo") + '</span></div></div>' +
@@ -1049,7 +1061,8 @@ function vistaAjustes(){
     '<div class="fila"><div class="t"><b>' + esc(Sesion.nombre || "Usuario local") + '</b><span>' +
       esc(Sesion.email || "modo local, sin cuentas") + ' · ' + esc(nombreRol(A.rol)) + '</span></div></div>' +
     (REMOTO ? '<button class="btn btn-suave btn-w" data-accion="refrescar-rol">Actualizar mi rol</button>' : "") +
-    (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
+    (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="cambiar-clave">Cambiar mi contraseña</button>' +
+      '<button class="btn btn-linea btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
             : '<button class="btn btn-linea btn-w" data-accion="ver-vendedor">Ver como vendedor</button>') +
     '<p class="mini" style="text-align:center;margin-top:8px">Los datos viven solo en este teléfono. Exporta cada cierto tiempo si quieres respaldo.</p></div>';
 }
@@ -2693,6 +2706,7 @@ async function crearTarea(){
       asignadoNombre: nombreAsignado, vence: d.vence, prioridad: d.prioridad,
       serie: d.serie, cliente: d.cliente });
     await persistir("tareas", t);
+    empujarAZoho(t.id);
     registrar("Tarea modificada (" + (cambios.join(", ") || "sin cambios") + "): " + t.titulo, t.serie || "");
     cerrarModal(); pintar();
     return avisar("Tarea modificada");
@@ -2705,6 +2719,7 @@ async function crearTarea(){
     creada: new Date().toISOString(), cerrada: "" };
   A.tareas.unshift(t);
   await persistir("tareas", t);
+  empujarAZoho(t.id);
   registrar("Tarea creada: " + t.titulo + (t.asignadoNombre ? " · " + t.asignadoNombre : ""), t.serie || "");
   cerrarModal(); pintar();
   avisar("Tarea creada");
@@ -2748,7 +2763,8 @@ function pintarFichaTarea(){
     '<p class="mini" style="margin:0">Creada por ' + esc(t.creadorNombre || "—") +
       (t.creada ? " el " + fechaCorta(String(t.creada).slice(0, 10)) : "") +
       (t.cerrada ? " · cerrada el " + fechaCorta(String(t.cerrada).slice(0, 10)) : "") +
-      (esSuper() ? "." : ". El texto original no se modifica.") + '</p>' +
+      (esSuper() ? "." : ". El texto original no se modifica.") +
+      (t.zohoId ? " Sincronizada con Zoho (" + esc(t.zohoId) + ")." : "") + '</p>' +
     (esSuper() ? '<button class="btn btn-linea btn-w" data-accion="editar-tarea">' +
       'Modificar la tarea y el responsable</button>' : "") +
     (puedeBorrar ? '<button class="btn btn-rojo btn-w" data-accion="borrar-tarea">Eliminar la tarea</button>' : ""),
@@ -2762,6 +2778,7 @@ async function guardarSolucion(cerrar){
   if(cerrar === "cerrar"){ t.estado = "Hecha"; t.cerrada = new Date().toISOString(); }
   if(cerrar === "reabrir"){ t.estado = "Pendiente"; t.cerrada = ""; }
   await persistir("tareas", t);
+  empujarAZoho(t.id);
   registrar((cerrar === "cerrar" ? "Tarea completada: " : cerrar === "reabrir" ? "Tarea reabierta: " : "Solución registrada: ") +
     t.titulo, t.serie || "");
   cerrarModal(); pintar();
@@ -2774,6 +2791,7 @@ async function marcarTarea(id){
   t.estado = pendiente(t) ? "Hecha" : "Pendiente";
   t.cerrada = t.estado === "Hecha" ? new Date().toISOString() : "";
   await persistir("tareas", t);
+  empujarAZoho(t.id);
   registrar((t.estado === "Hecha" ? "Tarea completada: " : "Tarea reabierta: ") + t.titulo, t.serie || "");
   pintar();
   avisar(t.estado === "Hecha" ? "Tarea lista" : "Tarea reabierta");
@@ -3866,6 +3884,22 @@ function opcionesResponsable(sel){
   }).join("");
 }
 
+/* Los errores de correo de Supabase llegan en inglés y sin contexto. */
+function traducirCorreo(m){
+  const t = String(m || "").toLowerCase();
+  if(t.indexOf("rate limit") >= 0)
+    return "Supabase solo envía 2 correos por hora con su servicio integrado, y ya se usaron. " +
+      "Espera una hora o configura un SMTP propio en Authentication → Emails para subir el límite a 30.";
+  if(t.indexOf("not authorized") >= 0 || t.indexOf("not_authorized") >= 0)
+    return "El servicio de correo integrado de Supabase solo escribe a miembros de tu organización. " +
+      "Para invitar a cualquier dirección hay que configurar un SMTP propio.";
+  if(t.indexOf("already") >= 0 || t.indexOf("registered") >= 0)
+    return "Ese correo ya tiene una cuenta creada.";
+  if(t.indexOf("invalid") >= 0 && t.indexOf("email") >= 0)
+    return "La dirección de correo no es válida.";
+  return m;
+}
+
 async function cargarPerfiles(){
   if(!REMOTO) return [];
   try{ return (await traerTodo("perfiles", "select=*&order=email")) || []; }
@@ -3880,7 +3914,7 @@ async function modalUsuarios(){
   pintarUsuarios();
 }
 
-function pintarUsuarios(){
+function pintarUsuarios(aviso){
   const orden = { super: 0, admin: 1, vendedor: 2 };
   const ps = (A.perfiles || []).slice().sort((a, b) =>
     (orden[a.rol] ?? 3) - (orden[b.rol] ?? 3) ||
@@ -3901,6 +3935,7 @@ function pintarUsuarios(){
       (p.rol === "super" ? "Super" : nombreRol(p.rol)) + '</span>' +
       '</button>').join("") + '</div>' : '<p class="mini">Todavía no hay perfiles cargados.</p>') +
 
+    (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
     '<div class="sec">Invitar a alguien</div>' +
     '<div class="f2"><label class="f"><span>Correo</span><input class="inp" id="us-email" type="email" placeholder="nombre@rexmas.com"></label>' +
     '<label class="f"><span>Rol</span><select class="inp" id="us-rol">' +
@@ -3908,7 +3943,8 @@ function pintarUsuarios(){
         .map(r => '<option value="' + r + '"' + (r === "vendedor" ? " selected" : "") + '>' + nombreRol(r) + '</option>').join("") +
       '</select></label></div>' +
     '<label class="f"><span>Nombre</span><input class="inp" id="us-nombre" placeholder="Como aparecerá en el historial"></label>' +
-    '<p class="mini" style="margin:0">Recibirá un correo con un enlace para crear su contraseña y entrar.</p>' +
+    '<p class="mini" style="margin:0">Recibirá un correo con un enlace para crear su contraseña y entrar. ' +
+    'Sin un SMTP propio, Supabase limita a 2 correos por hora y solo escribe a miembros de tu organización.</p>' +
     '<button class="btn btn-celeste btn-w" data-accion="invitar-usuario">Enviar invitación</button>',
     "Usuarios");
 }
@@ -4026,9 +4062,10 @@ async function borrarUsuario(){
     await modalUsuarios();
     avisar((p.nombre || p.email) + " eliminado");
   }catch(e){
-    A.ultimoError = e.message; A.sinGuardar = true;
-    cerrarModal(); pintar();
-    avisar("No se pudo eliminar. Revisa el aviso rojo.");
+    cerrarModal();
+    await modalUsuarios();
+    pintarUsuarios(traducirCorreo(e.message));
+    avisar("No se pudo eliminar la cuenta");
   }
 }
 
@@ -4055,11 +4092,94 @@ async function invitarUsuario(){
     pintarUsuarios();
     avisar("Invitación enviada a " + email);
   }catch(e){
-    if(btn){ btn.textContent = "Enviar invitación"; btn.disabled = false; }
-    A.ultimoError = e.message;
-    A.sinGuardar = true;
+    pintarUsuarios(traducirCorreo(e.message));
+    avisar("No se pudo enviar la invitación");
+  }
+}
+
+/* ------------------------------------------------------- Zoho Projects */
+async function llamarZoho(cuerpo){
+  const r = await fetch(API.base() + "/functions/v1/zoho", {
+    method: "POST", headers: API.cabeceras(), body: JSON.stringify(cuerpo || {})
+  });
+  let j = {};
+  try{ j = await r.json(); }catch(e){}
+  if(r.status === 404) throw new Error("Falta instalar la función 'zoho' en Supabase.");
+  if(!r.ok) throw new Error(j.error || "Zoho respondió con un error");
+  return j;
+}
+
+/* Envía una tarea en segundo plano: si falla, no interrumpe el trabajo. */
+function empujarAZoho(id){
+  if(!REMOTO || !A.zoho.activo) return;
+  llamarZoho({ accion: "empujar", id: id }).catch(e => console.warn("Zoho:", e.message));
+}
+
+async function sincronizarZoho(){
+  if(!REMOTO) return avisar("Necesitas la base compartida");
+  avisar("Sincronizando con Zoho…");
+  try{
+    const j = await llamarZoho({ accion: "sincronizar" });
+    A.zoho.ultima = new Date().toISOString();
+    await sincronizar(true);
     pintar();
-    avisar("No se pudo invitar. Revisa el aviso rojo.");
+    avisar("Zoho: " + j.creadas + " nuevas, " + j.actualizadas + " actualizadas, " + j.enviadas + " enviadas");
+  }catch(e){
+    A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true; pintar();
+    avisar("No se pudo sincronizar. Revisa el aviso rojo.");
+  }
+}
+
+async function modalZoho(){
+  ctx = { tipo: "zoho" };
+  let cfg = { zoho_portal: "", zoho_proyecto: "", zoho_ultima_sync: "" };
+  try{
+    const filas = (await API.req("GET", "integraciones?select=clave,valor")) || [];
+    for(const f of filas) cfg[f.clave] = f.valor || "";
+  }catch(e){}
+  ctx.cfg = cfg;
+  abrirModal(
+    '<p class="mini" style="margin:0">Las tareas viajan en las dos direcciones. Gana siempre la versión ' +
+    'modificada más tarde, sea de la app o de Zoho.</p>' +
+    '<div class="f2"><label class="f"><span>ID del portal</span><input class="inp" id="z-portal" value="' +
+      esc(cfg.zoho_portal) + '" placeholder="123456789"></label>' +
+    '<label class="f"><span>ID del proyecto</span><input class="inp" id="z-proyecto" value="' +
+      esc(cfg.zoho_proyecto) + '" placeholder="987654321"></label></div>' +
+    '<p class="mini" style="margin:0">Los dos números salen de la dirección cuando abres el proyecto en Zoho: ' +
+    'projects.zoho.com/portal/<b>portal</b>#taskdetail/<b>proyecto</b>/…</p>' +
+    (cfg.zoho_ultima_sync ? '<div class="fila"><div class="t"><b>Última sincronización</b><span>' +
+      esc(new Date(cfg.zoho_ultima_sync).toLocaleString("es-CL")) + '</span></div></div>' : "") +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-zoho">Guardar los datos del proyecto</button>' +
+    '<button class="btn btn-linea btn-w" data-accion="probar-zoho">Probar la conexión</button>' +
+    '<button class="btn btn-azul btn-w" data-accion="sincronizar-zoho">Sincronizar ahora</button>',
+    "Zoho Projects");
+}
+
+async function guardarZoho(){
+  const portal = val("z-portal"), proyecto = val("z-proyecto");
+  try{
+    await API.req("POST", "integraciones?on_conflict=clave", [
+      { clave: "zoho_portal", valor: portal },
+      { clave: "zoho_proyecto", valor: proyecto }
+    ], "resolution=merge-duplicates,return=minimal");
+    A.zoho.activo = !!(portal && proyecto);
+    cerrarModal(); pintar();
+    avisar("Datos de Zoho guardados");
+  }catch(e){ fallo(e, "integraciones"); }
+}
+
+async function probarZoho(){
+  try{
+    const j = await llamarZoho({ accion: "probar", portal: val("z-portal"), proyecto: val("z-proyecto") });
+    const t = j.ejemplo || {};
+    abrirModal('<p class="mini" style="margin:0">La conexión funciona. Así se ve una tarea de tu proyecto, ' +
+      'que sirve para confirmar los nombres de los campos:</p>' +
+      '<textarea class="inp" rows="12">' + esc(JSON.stringify(t, null, 1).slice(0, 4000)) + '</textarea>' +
+      '<button class="btn btn-suave btn-w" data-cerrar="1">Cerrar</button>', "Conexión con Zoho");
+  }catch(e){
+    A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true;
+    cerrarModal(); pintar();
+    avisar("No conecta. Revisa el aviso rojo.");
   }
 }
 
@@ -4291,6 +4411,8 @@ document.addEventListener("click", async ev => {
   const a = d.accion;
   if(a === "entrar") return entrar();
   if(a === "guardar-clave") return guardarClave();
+  if(a === "cambiar-clave") return modalClave("");
+  if(a === "guardar-clave-nueva") return guardarClaveNueva();
   if(a === "recuperar") return pedirRecuperacion();
   if(a === "refrescar-rol"){
     A.ultimoPerfil = 0;
@@ -4520,6 +4642,10 @@ document.addEventListener("click", async ev => {
   if(a === "confirmar-vaciar") return vaciarEquipos();
   if(a === "deshacer-importacion") return modalDeshacer();
   if(a === "confirmar-deshacer") return deshacerImportacion();
+  if(a === "zoho") return modalZoho();
+  if(a === "guardar-zoho") return guardarZoho();
+  if(a === "probar-zoho") return probarZoho();
+  if(a === "sincronizar-zoho"){ cerrarModal(); return sincronizarZoho(); }
   if(a === "usuarios") return modalUsuarios();
   if(a === "invitar-usuario") return invitarUsuario();
   if(a === "guardar-usuario") return guardarUsuario();
@@ -4674,6 +4800,38 @@ async function guardarClave(){
     vigilar();
     avisar("Contraseña guardada");
   }catch(e){ pintarClave(e.message); }
+}
+
+/* Cambiar la contraseña con la sesión abierta: no necesita correo. */
+function modalClave(aviso){
+  ctx = { tipo: "clave" };
+  abrirModal(
+    '<div class="fila" style="display:block"><div class="t"><b>' + esc(Sesion.nombre || Sesion.email || "") + '</b>' +
+      '<span>' + esc(Sesion.email || "") + '</span></div></div>' +
+    '<label class="f"><span>Contraseña nueva</span>' +
+    '<input class="inp" id="c-clave" type="password" autocomplete="new-password"></label>' +
+    '<label class="f"><span>Repítela</span>' +
+    '<input class="inp" id="c-clave2" type="password" autocomplete="new-password"></label>' +
+    '<p class="mini" style="margin:0">Al menos 6 caracteres. Se aplica de inmediato y la sesión sigue abierta ' +
+    'en este dispositivo; en los demás habrá que entrar con la nueva.</p>' +
+    (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-clave-nueva">Cambiar la contraseña</button>' +
+    '<button class="btn btn-suave btn-w" data-cerrar="1">Cancelar</button>',
+    "Cambiar contraseña");
+}
+
+async function guardarClaveNueva(){
+  const a = val("c-clave"), b = val("c-clave2");
+  if(a.length < 6) return modalClave("La contraseña debe tener al menos 6 caracteres");
+  if(a !== b) return modalClave("Las dos contraseñas no coinciden");
+  const btn = document.querySelector('[data-accion="guardar-clave-nueva"]');
+  if(btn){ btn.textContent = "Guardando…"; btn.disabled = true; }
+  try{
+    await API.cambiarClave(a);
+    registrar("Cambió su contraseña", "");
+    cerrarModal(); pintar();
+    avisar("Contraseña cambiada");
+  }catch(e){ modalClave(e.message); }
 }
 
 async function pedirRecuperacion(){
