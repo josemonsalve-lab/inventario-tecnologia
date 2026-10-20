@@ -4188,6 +4188,9 @@ async function modalZoho(){
     '<button class="btn btn-linea btn-w" data-accion="probar-zoho">Probar la conexión</button>' +
     '<button class="btn btn-azul btn-w" data-accion="sincronizar-zoho">Sincronizar ahora</button>' +
     '<button class="btn btn-linea btn-w" data-accion="reasignar-zoho">Volver a emparejar responsables</button>' +
+    '<div class="f2"><label class="f"><span>Buscar una tarea en Zoho</span>' +
+      '<input class="inp" id="z-buscar" placeholder="TA3-T1054 o parte del nombre"></label>' +
+      '<button class="btn btn-linea btn-w" style="align-self:end" data-accion="buscar-zoho">Buscar</button></div>' +
     '<p class="mini" style="margin:0">Usa lo segundo después de completar el campo <i>Correo en Zoho</i> de ' +
     'alguien: reasigna las tareas que quedaron sin responsable, sin tocar nada más.</p>',
     "Zoho Projects");
@@ -4252,6 +4255,39 @@ async function elegirProyectoZoho(valor){
     cerrarModal(); pintar();
     avisar("Proyecto conectado. Ahora prueba la conexión.");
   }catch(e){ fallo(e, "integraciones"); }
+}
+
+/* Busca una tarea concreta en Zoho para entender por qué no llegó. */
+async function buscarZoho(){
+  const texto = val("z-buscar");
+  if(!texto) return avisar("Escribe el prefijo o parte del nombre");
+  avisar("Buscando en Zoho…");
+  try{
+    const j = await llamarZoho({ accion: "buscar", texto: texto,
+      portal: val("z-portal"), proyecto: val("z-proyecto") });
+    const r = j.resumen || [];
+    abrirModal(
+      '<div class="fila" style="display:block"><table class="specs">' +
+        '<tr><td>Tareas revisadas en Zoho</td><td>' + nf.format(j.buscadas) + '</td></tr>' +
+        '<tr><td>Coincidencias</td><td>' + j.encontradas + '</td></tr>' +
+        '<tr><td>De la lista general</td><td>' + (j.origen ? j.origen.lista_general : "—") + '</td></tr>' +
+        '<tr><td>Sumadas por listas</td><td>' + (j.origen ? j.origen.con_listas - j.origen.lista_general : "—") + '</td></tr>' +
+        '<tr><td>Sumadas por subtareas</td><td>' + (j.origen ? j.origen.con_subtareas - j.origen.con_listas : "—") + '</td></tr>' +
+      '</table></div>' +
+      (r.length ? '<div class="lista">' + r.map(t =>
+        '<div class="fila"><div class="t"><b>' + esc((t.prefijo || "") + " " + (t.nombre || "")) + '</b>' +
+        '<span>lista: ' + esc(t.lista || "—") + " · estado: " + esc(t.estado || "—") + '</span>' +
+        '<span>responsable: ' + esc(t.responsable || "sin asignar") + '</span>' +
+        '<span>modificada: ' + esc(String(t.modificada || "").slice(0, 10)) + '</span></div></div>').join("") + '</div>'
+        : '<p class="aviso">Zoho no la devuelve en ninguna de las tres lecturas. Puede estar en otro ' +
+          'proyecto, archivada, o ser de un módulo distinto como incidencias.</p>') +
+      ((j.errores || []).length ? '<p class="mini">' + esc(j.errores.join(" · ")) + '</p>' : "") +
+      '<button class="btn btn-suave btn-w" data-cerrar="1">Cerrar</button>', "Buscar en Zoho");
+  }catch(e){
+    A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true;
+    cerrarModal(); pintar();
+    avisar("No se pudo buscar. Revisa el aviso rojo.");
+  }
 }
 
 async function probarZoho(){
@@ -4745,6 +4781,7 @@ document.addEventListener("click", async ev => {
   if(a === "zoho") return modalZoho();
   if(a === "guardar-zoho") return guardarZoho();
   if(a === "listar-zoho") return listarZoho();
+  if(a === "buscar-zoho") return buscarZoho();
   if(a === "probar-zoho") return probarZoho();
   if(a === "sincronizar-zoho"){
     if(!(await guardarZoho(true))) return;         // se guarda lo escrito antes de sincronizar
