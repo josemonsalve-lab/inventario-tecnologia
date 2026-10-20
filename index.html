@@ -4128,11 +4128,11 @@ function empujarAZoho(id){
   llamarZoho({ accion: "empujar", id: id }).catch(e => console.warn("Zoho:", e.message));
 }
 
-async function sincronizarZoho(){
+async function sincronizarZoho(reasignar){
   if(!REMOTO) return avisar("Necesitas la base compartida");
-  avisar("Sincronizando con Zoho…");
+  avisar(reasignar ? "Emparejando responsables…" : "Sincronizando con Zoho…");
   try{
-    const j = await llamarZoho({ accion: "sincronizar" });
+    const j = await llamarZoho({ accion: "sincronizar", reasignar: !!reasignar });
     A.zoho.ultima = new Date().toISOString();
     await sincronizar(true);
     pintar();
@@ -4185,7 +4185,10 @@ async function modalZoho(){
     '<button class="btn btn-linea btn-w" data-accion="listar-zoho">Buscar mis proyectos en Zoho</button>' +
     '<button class="btn btn-celeste btn-w" data-accion="guardar-zoho">Guardar los datos del proyecto</button>' +
     '<button class="btn btn-linea btn-w" data-accion="probar-zoho">Probar la conexión</button>' +
-    '<button class="btn btn-azul btn-w" data-accion="sincronizar-zoho">Sincronizar ahora</button>',
+    '<button class="btn btn-azul btn-w" data-accion="sincronizar-zoho">Sincronizar ahora</button>' +
+    '<button class="btn btn-linea btn-w" data-accion="reasignar-zoho">Volver a emparejar responsables</button>' +
+    '<p class="mini" style="margin:0">Usa lo segundo después de completar el campo <i>Correo en Zoho</i> de ' +
+    'alguien: reasigna las tareas que quedaron sin responsable, sin tocar nada más.</p>',
     "Zoho Projects");
 }
 
@@ -4746,6 +4749,11 @@ document.addEventListener("click", async ev => {
     if(!(await guardarZoho(true))) return;         // se guarda lo escrito antes de sincronizar
     cerrarModal();
     return sincronizarZoho();
+  }
+  if(a === "reasignar-zoho"){
+    if(!(await guardarZoho(true))) return;
+    cerrarModal();
+    return sincronizarZoho(true);
   }
   if(a === "usuarios") return modalUsuarios();
   if(a === "invitar-usuario") return invitarUsuario();
