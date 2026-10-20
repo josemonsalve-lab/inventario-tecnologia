@@ -4149,6 +4149,7 @@ async function modalZoho(){
     'projects.zoho.com/portal/<b>portal</b>#taskdetail/<b>proyecto</b>/…</p>' +
     (cfg.zoho_ultima_sync ? '<div class="fila"><div class="t"><b>Última sincronización</b><span>' +
       esc(new Date(cfg.zoho_ultima_sync).toLocaleString("es-CL")) + '</span></div></div>' : "") +
+    '<button class="btn btn-linea btn-w" data-accion="listar-zoho">Buscar mis proyectos en Zoho</button>' +
     '<button class="btn btn-celeste btn-w" data-accion="guardar-zoho">Guardar los datos del proyecto</button>' +
     '<button class="btn btn-linea btn-w" data-accion="probar-zoho">Probar la conexión</button>' +
     '<button class="btn btn-azul btn-w" data-accion="sincronizar-zoho">Sincronizar ahora</button>',
@@ -4165,6 +4166,45 @@ async function guardarZoho(){
     A.zoho.activo = !!(portal && proyecto);
     cerrarModal(); pintar();
     avisar("Datos de Zoho guardados");
+  }catch(e){ fallo(e, "integraciones"); }
+}
+
+/* Pide a Zoho la lista de portales y proyectos para elegir uno. */
+async function listarZoho(){
+  avisar("Consultando a Zoho…");
+  try{
+    const j = await llamarZoho({ accion: "listar" });
+    const portales = j.portales || [];
+    if(!portales.length) throw new Error("La cuenta no tiene portales de Projects a la vista");
+    ctx = { tipo: "zoho-lista", portales: portales };
+    abrirModal(
+      portales.map(p =>
+        '<div class="sec">' + esc(p.nombre) + ' · portal ' + esc(p.id) + '</div>' +
+        (p.proyectos.length ? '<div class="lista">' + p.proyectos.map(pr =>
+          '<button class="fila" data-zproy="' + esc(p.id) + '|' + esc(pr.id) + '">' +
+          '<div class="t"><b>' + esc(pr.nombre) + '</b><span>proyecto ' + esc(pr.id) + '</span></div>' +
+          '<span class="pt pt-disp">Elegir</span></button>').join("") + '</div>'
+          : '<p class="mini">Sin proyectos visibles en este portal.</p>')).join("") +
+      '<button class="btn btn-suave btn-w" data-accion="zoho">Volver</button>',
+      "Elige el proyecto");
+  }catch(e){
+    A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true;
+    cerrarModal(); pintar();
+    avisar("No se pudo consultar. Revisa el aviso rojo.");
+  }
+}
+
+async function elegirProyectoZoho(valor){
+  const [portal, proyecto] = String(valor).split("|");
+  try{
+    await API.req("POST", "integraciones?on_conflict=clave", [
+      { clave: "zoho_portal", valor: portal },
+      { clave: "zoho_proyecto", valor: proyecto }
+    ], "resolution=merge-duplicates,return=minimal");
+    A.zoho.activo = true;
+    registrar("Tareas conectadas al proyecto " + proyecto + " de Zoho", "");
+    cerrarModal(); pintar();
+    avisar("Proyecto conectado. Ahora prueba la conexión.");
   }catch(e){ fallo(e, "integraciones"); }
 }
 
@@ -4347,7 +4387,7 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy]");
   if(!t) return;
   const d = t.dataset;
 
@@ -4390,6 +4430,7 @@ document.addEventListener("click", async ev => {
   }
   if(d.mant) return modalTaller(d.mant);
   if(d.usuario) return modalUsuario(d.usuario);
+  if(d.zproy) return elegirProyectoZoho(d.zproy);
   if(d.persona){ A.filtroPersona = d.persona; A.filtro = "Todo"; return pintar(); }
   if(d.tarea) return modalTarea(d.tarea);
   if(d.hecha) return marcarTarea(d.hecha);
@@ -4644,6 +4685,7 @@ document.addEventListener("click", async ev => {
   if(a === "confirmar-deshacer") return deshacerImportacion();
   if(a === "zoho") return modalZoho();
   if(a === "guardar-zoho") return guardarZoho();
+  if(a === "listar-zoho") return listarZoho();
   if(a === "probar-zoho") return probarZoho();
   if(a === "sincronizar-zoho"){ cerrarModal(); return sincronizarZoho(); }
   if(a === "usuarios") return modalUsuarios();
