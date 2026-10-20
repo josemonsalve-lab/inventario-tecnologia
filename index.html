@@ -4165,8 +4165,12 @@ async function modalZoho(){
     "Zoho Projects");
 }
 
-async function guardarZoho(){
+async function guardarZoho(seguir){
   const portal = val("z-portal"), proyecto = val("z-proyecto");
+  if(!portal || !proyecto){
+    avisar("Escribe el portal y el proyecto");
+    return false;
+  }
   try{
     await API.req("POST", "integraciones?on_conflict=clave", [
       { clave: "zoho_portal", valor: portal },
@@ -4176,9 +4180,11 @@ async function guardarZoho(){
     ], "resolution=merge-duplicates,return=minimal");
     A.zoho.activo = !!(portal && proyecto);
     A.zoho.modo = val("z-modo") || "traer";
+    if(seguir) return true;                        // la sincronización sigue con el modal abierto
     cerrarModal(); pintar();
     avisar("Datos de Zoho guardados");
-  }catch(e){ fallo(e, "integraciones"); }
+    return true;
+  }catch(e){ fallo(e, "integraciones"); return false; }
 }
 
 /* Pide a Zoho la lista de portales y proyectos para elegir uno. */
@@ -4712,7 +4718,11 @@ document.addEventListener("click", async ev => {
   if(a === "guardar-zoho") return guardarZoho();
   if(a === "listar-zoho") return listarZoho();
   if(a === "probar-zoho") return probarZoho();
-  if(a === "sincronizar-zoho"){ cerrarModal(); return sincronizarZoho(); }
+  if(a === "sincronizar-zoho"){
+    if(!(await guardarZoho(true))) return;         // se guarda lo escrito antes de sincronizar
+    cerrarModal();
+    return sincronizarZoho();
+  }
   if(a === "usuarios") return modalUsuarios();
   if(a === "invitar-usuario") return invitarUsuario();
   if(a === "guardar-usuario") return guardarUsuario();
