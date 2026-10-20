@@ -4147,6 +4147,7 @@ async function sincronizarZoho(reasignar){
         ". Agrégalas en Ajustes → Administrar usuarios, en el campo Correo en Zoho.";
       A.sinGuardar = true;
     }
+    if(j.origen) console.log("Zoho, de dónde salieron:", j.origen);
     avisar("Zoho: leídas " + j.leidas + " · " + j.creadas + " nuevas · " + j.actualizadas + " actualizadas" +
       (j.omitidas ? " · " + j.omitidas + " sin cambios o fuera de fecha" : "") +
       (j.modo === "dos_vias" ? " · " + j.enviadas + " enviadas" : " (solo lectura)"));
