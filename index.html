@@ -4211,10 +4211,23 @@ async function elegirProyectoZoho(valor){
 async function probarZoho(){
   try{
     const j = await llamarZoho({ accion: "probar", portal: val("z-portal"), proyecto: val("z-proyecto") });
-    const t = j.ejemplo || {};
-    abrirModal('<p class="mini" style="margin:0">La conexión funciona. Así se ve una tarea de tu proyecto, ' +
-      'que sirve para confirmar los nombres de los campos:</p>' +
-      '<textarea class="inp" rows="12">' + esc(JSON.stringify(t, null, 1).slice(0, 4000)) + '</textarea>' +
+    const fila = (k, v) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr>';
+    abrirModal(
+      '<p class="mini" style="margin:0">La conexión funciona. Revisa que apunte al proyecto correcto:</p>' +
+      '<div class="fila" style="display:block"><table class="specs">' +
+                fila("Proyecto", j.proyecto_nombre || "—") +
+        fila("Portal", j.portal) +
+        fila("N° del proyecto", j.proyecto) +
+        fila("Tareas en Zoho", j.tareas_en_zoho) +
+        fila("Personas del portal", j.usuarios) +
+      '</table></div>' +
+      (j.nota ? '<p class="aviso">' + esc(j.nota) + '</p>' : "") +
+      (j.usuarios_ejemplo && j.usuarios_ejemplo.length
+        ? '<p class="mini" style="margin:0">Se emparejan por correo: ' + esc(j.usuarios_ejemplo.join(", ")) + '…</p>' : "") +
+      (j.ejemplo
+        ? '<div class="sec">Una tarea tal como la entrega Zoho</div>' +
+          '<textarea class="inp" rows="10">' + esc(JSON.stringify(j.ejemplo, null, 1).slice(0, 4000)) + '</textarea>'
+        : "") +
       '<button class="btn btn-suave btn-w" data-cerrar="1">Cerrar</button>', "Conexión con Zoho");
   }catch(e){
     A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true;
