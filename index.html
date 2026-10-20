@@ -158,6 +158,19 @@ details summary::-webkit-details-marker{display:none}
 .tarjeta-login h2{margin:0;font-size:19px;font-weight:900;color:var(--azul)}
 .tarjeta-login .logo{height:40px;width:auto;align-self:flex-start;margin-bottom:2px}
 .tarjeta-login p{margin:0}
+.graf{display:flex;flex-direction:column;gap:5px}
+.graf-fila{display:flex;align-items:center;gap:8px}
+.graf-et{font-size:11px;color:var(--n700);width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.graf-barra{flex:1;display:flex;height:14px;background:var(--linea);border-radius:100px;overflow:hidden}
+.graf-barra i{display:block;height:100%}
+.graf-num{font-size:11px;color:var(--azul);min-width:28px;text-align:right}
+.graf-mes{display:flex;gap:5px;align-items:flex-end;height:150px;overflow-x:auto;padding-top:6px}
+.gm-col{flex:1;min-width:30px;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%}
+.gm-barras{flex:1;width:100%;display:flex;flex-direction:column;justify-content:flex-end;
+  background:var(--fondo);border-radius:6px;overflow:hidden}
+.gm-barras i{display:block;width:100%}
+.gm-col b{font-size:10px;color:var(--azul)}
+.gm-et{font-size:9px;color:var(--n500);white-space:nowrap}
 .previa{border:1px solid var(--linea);border-radius:12px;overflow:hidden;background:#fff}
 .previa-banda{background:var(--azul);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:12px}
 .previa-banda img{height:26px;background:#fff;border-radius:6px;padding:4px 6px}
@@ -583,6 +596,7 @@ const A = {
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
   vista: "stock", q: "", filtro: "Todas", filtroModelo: "", filtroTipo: "", filtroSit: {}, filtroPersona: "",
+  periodoT: "todo", desdeT: "", hastaT: "", ordenT: "recientes",
   soloBajos: false, sinGuardar: false
 };
 const esAdmin = () => A.rol === "admin" || A.rol === "super";
@@ -2528,10 +2542,154 @@ function ordenTareas(a, b){
   return va.localeCompare(vb) || pa - pb;
 }
 
+/* ------------------------------------------- estadísticas de tareas */
+const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+/* La fecha de referencia de una tarea: la de vencimiento si la tiene, si no la de creación. */
+const fechaTarea = t => String(t.vence || t.creada || "").slice(0, 10);
+
+const PERIODOS_T = [["todo","Todo"],["mes","Este mes"],["pasado","Mes pasado"],
+  ["3m","Últimos 3 meses"],["anio","Este año"],["rango","Fechas propias"]];
+
+function rangoTareas(){
+  const hoyD = new Date(hoy() + "T12:00:00");
+  const iso = d => d.toISOString().slice(0, 10);
+  const p = A.periodoT || "todo";
+  if(p === "rango") return { desde: A.desdeT || "", hasta: A.hastaT || "" };
+  if(p === "mes"){
+    const d = new Date(hoyD.getFullYear(), hoyD.getMonth(), 1);
+    return { desde: iso(d), hasta: "" };
+  }
+  if(p === "pasado"){
+    const d = new Date(hoyD.getFullYear(), hoyD.getMonth() - 1, 1);
+    const f = new Date(hoyD.getFullYear(), hoyD.getMonth(), 0);
+    return { desde: iso(d), hasta: iso(f) };
+  }
+  if(p === "3m"){
+    const d = new Date(hoyD.getFullYear(), hoyD.getMonth() - 2, 1);
+    return { desde: iso(d), hasta: "" };
+  }
+  if(p === "anio") return { desde: hoyD.getFullYear() + "-01-01", hasta: "" };
+  return { desde: "", hasta: "" };
+}
+
+function tareasFiltradas(){
+  const { desde, hasta } = rangoTareas();
+  const q = A.q.toLowerCase();
+  return A.tareas.filter(t => {
+    if(A.filtroPersona === "__sin"){ if(t.asignadoA) return false; }
+    else if(A.filtroPersona && t.asignadoA !== A.filtroPersona) return false;
+    const f = fechaTarea(t);
+    if(desde && (!f || f < desde)) return false;
+    if(hasta && (!f || f > hasta)) return false;
+    if(!q) return true;
+    return [t.titulo, t.detalle, t.asignadoNombre, t.serie, t.cliente, t.solucion]
+      .filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+}
+
+/* --- gráficos dibujados a mano, sin librerías --- */
+function barrasH(datos, alto){
+  if(!datos.length) return '<p class="mini">Sin datos en este período.</p>';
+  const max = Math.max(...datos.map(d => d.total)) || 1;
+  const h = alto || 26;
+  return '<div class="graf">' + datos.map(d => {
+    const anP = Math.round((d.pend / max) * 100), anH = Math.round((d.hechas / max) * 100);
+    return '<div class="graf-fila" style="height:' + h + 'px">' +
+      '<span class="graf-et">' + esc(d.nombre) + '</span>' +
+      '<span class="graf-barra">' +
+        (anH ? '<i style="width:' + anH + '%;background:var(--lima)"></i>' : "") +
+        (anP ? '<i style="width:' + anP + '%;background:var(--celeste)"></i>' : "") +
+      '</span>' +
+      '<b class="graf-num">' + nf.format(d.total) + '</b></div>';
+  }).join("") + '</div>';
+}
+
+function barrasMes(meses){
+  if(!meses.length) return '<p class="mini">Sin datos en este período.</p>';
+  const max = Math.max(...meses.map(m => m.total)) || 1;
+  return '<div class="graf-mes">' + meses.map(m =>
+    '<div class="gm-col" title="' + esc(m.etiqueta) + ': ' + m.total + '">' +
+      '<span class="gm-barras">' +
+        '<i style="height:' + Math.round((m.hechas / max) * 100) + '%;background:var(--lima)"></i>' +
+        '<i style="height:' + Math.round((m.pend / max) * 100) + '%;background:var(--celeste)"></i>' +
+      '</span>' +
+      '<b>' + (m.total || "") + '</b>' +
+      '<span class="gm-et">' + esc(m.etiqueta) + '</span></div>').join("") + '</div>';
+}
+
+function vistaEstadisticas(ts){
+  const hechas = ts.filter(t => !pendiente(t)).length;
+  const vencidas = ts.filter(vencida).length;
+
+  /* por persona */
+  const porP = {};
+  for(const t of ts){
+    const k = t.asignadoNombre || "Sin responsable";
+    const x = porP[k] = porP[k] || { nombre: k, total: 0, pend: 0, hechas: 0 };
+    x.total++;
+    if(pendiente(t)) x.pend++; else x.hechas++;
+  }
+  const personas = Object.values(porP).sort((a, b) => b.total - a.total).slice(0, 12);
+
+  /* por mes */
+  const porM = {};
+  for(const t of ts){
+    const f = fechaTarea(t);
+    if(!f) continue;
+    const k = f.slice(0, 7);
+    const x = porM[k] = porM[k] || { k: k, total: 0, pend: 0, hechas: 0,
+      etiqueta: MESES[Number(k.slice(5, 7)) - 1] + " " + k.slice(2, 4) };
+    x.total++;
+    if(pendiente(t)) x.pend++; else x.hechas++;
+  }
+  const meses = Object.values(porM).sort((a, b) => a.k.localeCompare(b.k)).slice(-12);
+
+  const cerradasMes = {};
+  for(const t of ts){
+    if(pendiente(t) || !t.cerrada) continue;
+    const k = String(t.cerrada).slice(0, 7);
+    cerradasMes[k] = (cerradasMes[k] || 0) + 1;
+  }
+  const mejorMes = Object.keys(cerradasMes).sort((a, b) => cerradasMes[b] - cerradasMes[a])[0];
+
+  return '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+      '<tr><td>Tareas en el período</td><td>' + nf.format(ts.length) + '</td></tr>' +
+      '<tr><td>Cerradas</td><td>' + nf.format(hechas) +
+        (ts.length ? " · " + Math.round(hechas / ts.length * 100) + "%" : "") + '</td></tr>' +
+      '<tr><td>Pendientes</td><td>' + nf.format(ts.length - hechas) + '</td></tr>' +
+      '<tr><td>Vencidas</td><td' + (vencidas ? ' style="color:var(--rojo)"' : "") + '>' + nf.format(vencidas) + '</td></tr>' +
+      '<tr><td>Personas con tareas</td><td>' + nf.format(personas.length) + '</td></tr>' +
+      (mejorMes ? '<tr><td>Mes con más cierres</td><td>' +
+        MESES[Number(mejorMes.slice(5, 7)) - 1] + " " + mejorMes.slice(0, 4) + " · " +
+        cerradasMes[mejorMes] + '</td></tr>' : "") +
+    '</table></div>' +
+    '<p class="mini" style="margin:0 0 6px"><i style="display:inline-block;width:9px;height:9px;' +
+      'background:var(--celeste);border-radius:2px"></i> pendientes   ' +
+      '<i style="display:inline-block;width:9px;height:9px;background:var(--lima);border-radius:2px"></i> cerradas</p>' +
+    '<div class="sec">Por persona</div>' + barrasH(personas) +
+    '<div class="sec">Por mes</div>' + barrasMes(meses) +
+    '<button class="btn btn-linea btn-w" style="margin-top:14px" data-accion="csv-tareas">' +
+      'Exportar estas ' + nf.format(ts.length) + ' tareas a CSV</button>';
+}
+
+function csvTareas(){
+  const ts = tareasFiltradas();
+  if(!ts.length) return avisar("No hay tareas con esos filtros");
+  const cab = ["titulo","estado","responsable","grupo","prioridad","vence","creada","cerrada",
+    "serie","cliente","detalle","solucion"];
+  const gente = {};
+  for(const p of (A.perfiles || [])) gente[p.id] = p;
+  const filas = ts.map(t => [t.titulo, t.estado, t.asignadoNombre || "",
+    (gente[t.asignadoA] || {}).grupo || "", t.prioridad, t.vence || "",
+    String(t.creada || "").slice(0, 10), String(t.cerrada || "").slice(0, 10),
+    t.serie || "", t.cliente || "", t.detalle || "", t.solucion || ""]);
+  descargarCSV("tareas-" + hoy(), cab, filas);
+}
+
 function vistaTareas(){
   const q = A.q.toLowerCase();
   const f = A.filtro === "Todas" ? "Pendientes" : A.filtro;
-  const chips = '<div class="chips">' + ["Pendientes", "Mías", "Vencidas", "Hechas", "Todo", "Por persona"].map(x =>
+  const chips = '<div class="chips">' + ["Pendientes", "Mías", "Vencidas", "Hechas", "Todo", "Por persona", "Estadísticas"].map(x =>
     '<button class="chip ' + (f === x ? "on" : "") + (x === "Vencidas" ? " alerta" : "") +
     '" data-sit="' + esc(x) + '">' + x + '</button>').join("") + '</div>';
 
@@ -2539,6 +2697,21 @@ function vistaTareas(){
   const gente = (A.perfiles || []).slice().sort((a, b) =>
     String(a.nombre || a.email).localeCompare(String(b.nombre || b.email)));
   const cuenta = id => A.tareas.filter(t => (id === "" ? !t.asignadoA : t.asignadoA === id));
+  const selPeriodo = '<div class="f2" style="margin-bottom:10px">' +
+    '<label class="f"><span>Período</span><select class="inp" id="t-periodo">' +
+      PERIODOS_T.map(([k, t]) => '<option value="' + k + '"' +
+        ((A.periodoT || "todo") === k ? " selected" : "") + '>' + t + '</option>').join("") +
+    '</select></label>' +
+    '<label class="f"><span>Ordenar por</span><select class="inp" id="t-orden">' +
+      [["recientes","Más recientes"],["vence","Vencimiento"],["prioridad","Prioridad"]].map(([k, t]) =>
+        '<option value="' + k + '"' + ((A.ordenT || "recientes") === k ? " selected" : "") + '>' + t + '</option>').join("") +
+    '</select></label></div>' +
+    (A.periodoT === "rango"
+      ? '<div class="f2" style="margin-bottom:10px">' +
+        '<label class="f"><span>Desde</span><input class="inp" id="t-desde" type="date" value="' + esc(A.desdeT || "") + '"></label>' +
+        '<label class="f"><span>Hasta</span><input class="inp" id="t-hasta" type="date" value="' + esc(A.hastaT || "") + '"></label></div>'
+      : "");
+
   const selPersona = '<label class="f" style="margin-bottom:10px"><span>Responsable</span>' +
     '<select class="inp" id="t-persona"><option value="">Todos (' + nf.format(A.tareas.filter(pendiente).length) + ' pendientes)</option>' +
     gente.filter(p => puedeRecibir(p) || cuenta(p.id).length)
@@ -2547,17 +2720,17 @@ function vistaTareas(){
     '<option value="__sin"' + (A.filtroPersona === "__sin" ? " selected" : "") + '>Sin asignar  (' +
       cuenta("").filter(pendiente).length + ')</option></select></label>';
 
-  let ts = A.tareas.slice().sort(ordenTareas);
-  ts = ts.filter(t => {
-    if(A.filtroPersona === "__sin"){ if(t.asignadoA) return false; }
-    else if(A.filtroPersona && t.asignadoA !== A.filtroPersona) return false;
+  let ts = tareasFiltradas().filter(t => {
     if(f === "Pendientes" && !pendiente(t)) return false;
     if(f === "Hechas" && pendiente(t)) return false;
     if(f === "Vencidas" && !vencida(t)) return false;
-    if(f === "Mías" && !(t.asignadoA === Sesion.uid || (!REMOTO && true))) return false;
-    if(!q) return true;
-    return [t.titulo, t.detalle, t.asignadoNombre, t.serie, t.cliente].filter(Boolean).join(" ").toLowerCase().includes(q);
-  });
+    if(f === "Mías" && !(t.asignadoA === Sesion.uid || !REMOTO)) return false;
+    return true;
+  }).sort(A.ordenT === "vence" ? ordenTareas
+    : A.ordenT === "prioridad" ? (a, b) =>
+        PRIORIDADES.indexOf(a.prioridad || "Normal") - PRIORIDADES.indexOf(b.prioridad || "Normal") ||
+        String(a.vence || "9999").localeCompare(String(b.vence || "9999"))
+    : (a, b) => String(b.zohoModificado || b.creada || "").localeCompare(String(a.zohoModificado || a.creada || "")));
 
   const resumen = '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
     '<tr><td>Pendientes</td><td>' + nf.format(A.tareas.filter(pendiente).length) + '</td></tr>' +
@@ -2586,9 +2759,15 @@ function vistaTareas(){
   if(!A.tareas.length) return chips + resumen +
     vacio("Sin tareas", "Anota lo que hay que hacer: llamar a un cliente, instalar un equipo, pedir repuestos.",
       "Crear tarea", "nueva-tarea");
-  if(!ts.length) return chips + selPersona + resumen + '<p class="mini">Nada con ese filtro.</p>';
+  if(f === "Estadísticas") return chips + selPeriodo + selPersona + vistaEstadisticas(tareasFiltradas());
+  if(!ts.length) return chips + selPeriodo + selPersona + resumen + '<p class="mini">Nada con ese filtro.</p>';
 
-  return chips + selPersona + resumen + '<div class="lista">' + ts.slice(0, 200).map(t => {
+  const enPantallaT = ts.slice(0, 300);
+  const aviso200 = ts.length > enPantallaT.length
+    ? '<p class="mini" style="margin:0 0 8px">Mostrando ' + enPantallaT.length + ' de ' +
+      nf.format(ts.length) + '. Usa el buscador de arriba para encontrar una en particular.</p>' : "";
+
+  return chips + selPeriodo + selPersona + resumen + aviso200 + '<div class="lista">' + enPantallaT.map(t => {
     const hecha = !pendiente(t);
     return '<div class="fila' + (hecha ? '" style="opacity:.6' : "") + '">' +
       '<button class="marca' + (hecha ? " on" : "") + '" data-hecha="' + t.id + '">' +
@@ -4752,6 +4931,7 @@ document.addEventListener("click", async ev => {
   if(a === "revisar-tarea"){ leerTareaNueva(); ctx.paso = 2; return pintarTareaNueva(); }
   if(a === "volver-tarea"){ ctx.paso = 1; return pintarTareaNueva(); }
   if(a === "confirmar-tarea") return crearTarea();
+  if(a === "csv-tareas") return csvTareas();
   if(a === "guardar-solucion") return guardarSolucion("");
   if(a === "cerrar-tarea") return guardarSolucion("cerrar");
   if(a === "reabrir-tarea") return guardarSolucion("reabrir");
@@ -4835,6 +5015,10 @@ document.addEventListener("change", async ev => {
   if(ev.target.id === "eq-modelo"){ A.filtroModelo = ev.target.value; return pintar(); }
   if(ev.target.id === "eq-tipo"){ A.filtroTipo = ev.target.value; return pintar(); }
   if(ev.target.id === "t-persona"){ A.filtroPersona = ev.target.value; return pintar(); }
+  if(ev.target.id === "t-periodo"){ A.periodoT = ev.target.value; return pintar(); }
+  if(ev.target.id === "t-orden"){ A.ordenT = ev.target.value; return pintar(); }
+  if(ev.target.id === "t-desde"){ A.desdeT = ev.target.value; return pintar(); }
+  if(ev.target.id === "t-hasta"){ A.hastaT = ev.target.value; return pintar(); }
   if(ev.target.dataset && ev.target.dataset.rolde) return cambiarRol(ev.target.dataset.rolde, ev.target.value);
   if(ev.target.id && ev.target.id.indexOf("r-") === 0){
     const v = ev.target.value;
