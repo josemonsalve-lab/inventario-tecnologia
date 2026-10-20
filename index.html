@@ -4426,8 +4426,17 @@ async function enviarTareaAZoho(){
     const j = await llamarZoho({ accion: "empujar", id: t.id });
     t.zohoId = j.zoho_id || t.zohoId;
     await sincronizar(true);
+    const r = j.responsable;
+    if(r && !r.ok){
+      A.ultimoError = "La tarea quedó en Zoho, pero sin responsable. " +
+        (r.motivo ? r.motivo : "Zoho rechazó los formatos probados: " +
+          (r.intentos || []).map(i => i.forma + " → " + (i.error || i.respuesta)).join(" · ")) +
+        " · Personas conocidas de Zoho: " + (j.personas_conocidas || 0);
+      A.sinGuardar = true;
+    }
     cerrarModal(); pintar();
-    avisar(j.zoho_id ? "Creada en Zoho con el número " + j.zoho_id : "Enviada a Zoho");
+    avisar(j.zoho_id ? "En Zoho con el número " + j.zoho_id +
+      (r && r.ok ? " y responsable asignado" : "") : "Enviada a Zoho");
   }catch(e){
     A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true;
     cerrarModal(); pintar();
