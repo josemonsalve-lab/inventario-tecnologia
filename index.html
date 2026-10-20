@@ -4475,7 +4475,8 @@ async function sincronizarZoho(reasignar){
 
 async function modalZoho(){
   ctx = { tipo: "zoho" };
-  let cfg = { zoho_portal: "", zoho_proyecto: "", zoho_ultima_sync: "", zoho_modo: "traer", zoho_desde: "" };
+  let cfg = { zoho_portal: "", zoho_proyecto: "", zoho_ultima_sync: "", zoho_modo: "traer", zoho_desde: "",
+    zoho_estado_cerrado: "", zoho_estado_abierto: "" };
   try{
     const filas = (await API.req("GET", "integraciones?select=clave,valor")) || [];
     for(const f of filas) cfg[f.clave] = f.valor || "";
@@ -4499,6 +4500,12 @@ async function modalZoho(){
     'projects.zoho.com/portal/<b>portal</b>#taskdetail/<b>proyecto</b>/…</p>' +
     (cfg.zoho_ultima_sync ? '<div class="fila"><div class="t"><b>Última sincronización</b><span>' +
       esc(new Date(cfg.zoho_ultima_sync).toLocaleString("es-CL")) + '</span></div></div>' : "") +
+    '<div class="f2"><label class="f"><span>Estado al cerrar</span><input class="inp" id="z-cerrado" value="' +
+      esc(cfg.zoho_estado_cerrado) + '" placeholder="Finalizado"></label>' +
+    '<label class="f"><span>Estado al reabrir</span><input class="inp" id="z-abierto" value="' +
+      esc(cfg.zoho_estado_abierto) + '" placeholder="Abrir"></label></div>' +
+    '<p class="mini" style="margin:0">Escribe el nombre tal como aparece en Zoho. En blanco se usa el estado ' +
+    'de cierre más utilizado del proyecto, que puede no ser el que quieres si hay varios.</p>' +
     '<button class="btn btn-linea btn-w" data-accion="listar-zoho">Buscar mis proyectos en Zoho</button>' +
     '<button class="btn btn-celeste btn-w" data-accion="guardar-zoho">Guardar los datos del proyecto</button>' +
     '<button class="btn btn-linea btn-w" data-accion="probar-zoho">Probar la conexión</button>' +
@@ -4523,7 +4530,9 @@ async function guardarZoho(seguir){
       { clave: "zoho_portal", valor: portal },
       { clave: "zoho_proyecto", valor: proyecto },
       { clave: "zoho_modo", valor: val("z-modo") || "traer" },
-      { clave: "zoho_desde", valor: val("z-desde") || "" }
+      { clave: "zoho_desde", valor: val("z-desde") || "" },
+      { clave: "zoho_estado_cerrado", valor: val("z-cerrado") || "" },
+      { clave: "zoho_estado_abierto", valor: val("z-abierto") || "" }
     ], "resolution=merge-duplicates,return=minimal");
     A.zoho.activo = !!(portal && proyecto);
     A.zoho.modo = val("z-modo") || "traer";
@@ -4618,6 +4627,8 @@ async function probarZoho(){
         fila("N° del proyecto", j.proyecto) +
         fila("Tareas en Zoho", j.tareas_en_zoho) +
         fila("Personas del portal", j.usuarios) +
+        (j.estado_al_cerrar ? fila("Estado que usará al cerrar", j.estado_al_cerrar) : "") +
+        ((j.estados || []).length ? fila("Estados del proyecto", j.estados.join(", ")) : "") +
       '</table></div>' +
       (j.nota ? '<p class="aviso">' + esc(j.nota) + '</p>' : "") +
       (j.usuarios_ejemplo && j.usuarios_ejemplo.length
