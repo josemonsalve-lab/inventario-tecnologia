@@ -2543,31 +2543,51 @@ function ordenTareas(a, b){
 }
 
 /* ------------------------------------------- estadísticas de tareas */
-/* Dos tareas son de la misma persona si comparten la cuenta, o si el nombre
-   que trae Zoho coincide con el nombre o el primer apellido de alguna cuenta. */
+/* Dos tareas son de la misma persona si comparten la cuenta o si sus nombres
+   coinciden en lo esencial. Se comparan por palabras, no por texto completo,
+   para que calcen "Jose Monsalve", "Jose Monsalve Vendedor" y la cuenta
+   jose.monsalve@visma.com, que son la misma persona escrita de tres formas. */
+function palabrasNombre(texto){
+  let s = sinTildes(texto || "");
+  if(s.indexOf("@") >= 0) s = s.split("@")[0];          // de un correo, lo de antes de la arroba
+  return s.replace(/[._\-+]+/g, " ")
+    .split(" ")
+    .map(x => x.trim())
+    .filter(x => x.length > 2 && ["del","las","los","sra","sr","vendedor","admin",
+      "tecnico", "soporte", "user", "usuario"].indexOf(x) < 0);
+}
+function mismaPersona(a, b){
+  const A1 = palabrasNombre(a), B1 = palabrasNombre(b);
+  if(!A1.length || !B1.length) return false;
+  const comunes = A1.filter(x => B1.indexOf(x) >= 0).length;
+  if(A1.length === 1 || B1.length === 1) return comunes >= 1 && A1[0] === B1[0];
+  return comunes >= 2;                                   // nombre y apellido en común
+}
 function perfilPorNombre(nombre){
-  const n = sinTildes(nombre || "");
-  if(!n) return null;
-  return (A.perfiles || []).find(p => {
-    const pn = sinTildes(p.nombre || p.email || "");
-    if(!pn) return false;
-    if(pn === n) return true;
-    const partes = pn.split(" ").filter(Boolean);
-    return partes.length > 1 && (partes[0] === n || (partes[0] + " " + partes[1]) === n);
-  }) || null;
+  if(!nombre) return null;
+  const gente = A.perfiles || [];
+  return gente.find(p => sinTildes(p.nombre || p.email || "") === sinTildes(nombre)) ||
+         gente.find(p => mismaPersona(p.nombre || p.email || "", nombre)) || null;
 }
 function claveDePersona(t){
   if(t.asignadoA) return "id:" + t.asignadoA;
   const p = perfilPorNombre(t.asignadoNombre);
   if(p) return "id:" + p.id;
-  return t.asignadoNombre ? "nom:" + sinTildes(t.asignadoNombre) : "sin";
+  if(!t.asignadoNombre) return "sin";
+  /* sin cuenta: se agrupan por sus palabras, así "Daniel" y "Daniel Ayala"
+     caen en la misma fila aunque ninguno tenga perfil */
+  const w = palabrasNombre(t.asignadoNombre);
+  return "nom:" + (w.slice(0, 2).join(" ") || sinTildes(t.asignadoNombre));
 }
 function nombreDePersona(t){
-  if(t.asignadoNombre) {
-    const p = perfilPorNombre(t.asignadoNombre);
-    return p ? (p.nombre || p.email) : t.asignadoNombre;
-  }
-  return "Sin responsable";
+  const p = t.asignadoA ? (A.perfiles || []).find(x => x.id === t.asignadoA)
+                        : perfilPorNombre(t.asignadoNombre);
+  /* Si la cuenta no tiene nombre escrito, se usa el que venga en la tarea
+     antes que mostrar un correo. */
+  if(p && p.nombre) return p.nombre;
+  if(t.asignadoNombre && t.asignadoNombre.indexOf("@") < 0) return t.asignadoNombre;
+  if(p) return p.nombre || p.email;
+  return t.asignadoNombre || "Sin responsable";
 }
 const grupoDe = t => {
   const id = t.asignadoA || ((perfilPorNombre(t.asignadoNombre) || {}).id);
@@ -2659,7 +2679,9 @@ function vistaEstadisticas(ts){
   for(const t of ts){
     const clave = claveDePersona(t);
     const x = porP[clave] = porP[clave] || { nombre: nombreDePersona(t), total: 0, pend: 0, hechas: 0 };
-    if(t.asignadoA) x.nombre = t.asignadoNombre || x.nombre;   // gana el nombre de la cuenta
+    const cand = nombreDePersona(t);                           // gana el nombre más completo
+    if(cand && cand.indexOf("@") < 0 &&
+       (x.nombre.indexOf("@") >= 0 || cand.length > x.nombre.length)) x.nombre = cand;
     x.total++;
     if(pendiente(t)) x.pend++; else x.hechas++;
   }
