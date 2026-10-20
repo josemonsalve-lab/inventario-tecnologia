@@ -550,6 +550,7 @@ async function sincronizar(silencioso){
         const c = {}; for(const f of filas) c[f.clave] = f.valor || "";
         A.zoho.activo = !!(c.zoho_portal && c.zoho_proyecto);
         A.zoho.ultima = c.zoho_ultima_sync || "";
+        A.zoho.modo = c.zoho_modo || "traer";
       }catch(e){}
     }
     if(!A.perfiles.length) A.perfiles = await cargarPerfiles();
@@ -577,7 +578,7 @@ async function usarCache(){
 const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
   cotizaciones: [], cot: null, selEq: {}, mantenimientos: [], perfiles: [], tareas: [],
-  zoho: { activo: false, ultima: "" },
+  zoho: { activo: false, ultima: "", modo: "traer" },
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
@@ -4111,7 +4112,7 @@ async function llamarZoho(cuerpo){
 
 /* Envía una tarea en segundo plano: si falla, no interrumpe el trabajo. */
 function empujarAZoho(id){
-  if(!REMOTO || !A.zoho.activo) return;
+  if(!REMOTO || !A.zoho.activo || A.zoho.modo !== "dos_vias") return;
   llamarZoho({ accion: "empujar", id: id }).catch(e => console.warn("Zoho:", e.message));
 }
 
@@ -4123,7 +4124,8 @@ async function sincronizarZoho(){
     A.zoho.ultima = new Date().toISOString();
     await sincronizar(true);
     pintar();
-    avisar("Zoho: " + j.creadas + " nuevas, " + j.actualizadas + " actualizadas, " + j.enviadas + " enviadas");
+    avisar("Zoho: " + j.creadas + " nuevas, " + j.actualizadas + " actualizadas" +
+      (j.modo === "dos_vias" ? ", " + j.enviadas + " enviadas" : " (solo lectura)"));
   }catch(e){
     A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true; pintar();
     avisar("No se pudo sincronizar. Revisa el aviso rojo.");
@@ -4132,15 +4134,22 @@ async function sincronizarZoho(){
 
 async function modalZoho(){
   ctx = { tipo: "zoho" };
-  let cfg = { zoho_portal: "", zoho_proyecto: "", zoho_ultima_sync: "" };
+  let cfg = { zoho_portal: "", zoho_proyecto: "", zoho_ultima_sync: "", zoho_modo: "traer", zoho_desde: "" };
   try{
     const filas = (await API.req("GET", "integraciones?select=clave,valor")) || [];
     for(const f of filas) cfg[f.clave] = f.valor || "";
   }catch(e){}
   ctx.cfg = cfg;
   abrirModal(
-    '<p class="mini" style="margin:0">Las tareas viajan en las dos direcciones. Gana siempre la versión ' +
-    'modificada más tarde, sea de la app o de Zoho.</p>' +
+    '<div class="f2"><label class="f"><span>Dirección</span><select class="inp" id="z-modo">' +
+      '<option value="traer"' + (cfg.zoho_modo !== "dos_vias" ? " selected" : "") + '>Solo traer de Zoho</option>' +
+      '<option value="dos_vias"' + (cfg.zoho_modo === "dos_vias" ? " selected" : "") + '>Las dos direcciones</option>' +
+      '</select></label>' +
+    '<label class="f"><span>Traer desde</span><input class="inp" id="z-desde" type="date" value="' +
+      esc(String(cfg.zoho_desde || "").slice(0, 10)) + '"></label></div>' +
+    '<p class="mini" style="margin:0">Empieza en <b>solo traer</b> para revisar cómo llegan las tareas sin ' +
+    'escribir nada en Zoho. La fecha deja fuera lo anterior: en blanco, trae todo el histórico. ' +
+    'En dos direcciones gana siempre la versión modificada más tarde.</p>' +
     '<div class="f2"><label class="f"><span>ID del portal</span><input class="inp" id="z-portal" value="' +
       esc(cfg.zoho_portal) + '" placeholder="123456789"></label>' +
     '<label class="f"><span>ID del proyecto</span><input class="inp" id="z-proyecto" value="' +
@@ -4161,9 +4170,12 @@ async function guardarZoho(){
   try{
     await API.req("POST", "integraciones?on_conflict=clave", [
       { clave: "zoho_portal", valor: portal },
-      { clave: "zoho_proyecto", valor: proyecto }
+      { clave: "zoho_proyecto", valor: proyecto },
+      { clave: "zoho_modo", valor: val("z-modo") || "traer" },
+      { clave: "zoho_desde", valor: val("z-desde") || "" }
     ], "resolution=merge-duplicates,return=minimal");
     A.zoho.activo = !!(portal && proyecto);
+    A.zoho.modo = val("z-modo") || "traer";
     cerrarModal(); pintar();
     avisar("Datos de Zoho guardados");
   }catch(e){ fallo(e, "integraciones"); }
