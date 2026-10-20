@@ -3903,7 +3903,10 @@ function traducirCorreo(m){
 
 async function cargarPerfiles(){
   if(!REMOTO) return [];
-  try{ return (await traerTodo("perfiles", "select=*&order=email")) || []; }
+  try{
+    return ((await traerTodo("perfiles", "select=*&order=email")) || [])
+      .map(p => Object.assign({}, p, { zohoEmail: p.zoho_email || "" }));
+  }
   catch(e){ fallo(e, "perfiles"); return []; }
 }
 
@@ -3985,6 +3988,10 @@ function modalUsuario(id){
       opciones(["Sí", "No"], puedeRecibir(p) ? "Sí" : "No") + '</select></label></div>' +
     '<label class="f"><span>Grupo</span><input class="inp" id="u-grupo" list="grupos" value="' + esc(p.grupo || "") +
       '" placeholder="Técnicos, Comercial, Bodega"></label>' +
+    '<label class="f"><span>Correo en Zoho</span><input class="inp" id="u-zoho" type="email" value="' +
+      esc(p.zohoEmail || "") + '" placeholder="Solo si en Zoho usa otra dirección"></label>' +
+    '<p class="mini" style="margin:0">Sirve para que las tareas de Zoho queden asignadas a esta persona ' +
+    'cuando allá figura con otro correo.</p>' +
     '<datalist id="grupos">' + grupos.map(g => '<option value="' + esc(g) + '">').join("") + '</datalist>' +
     '<p class="mini" style="margin:0">Solo las personas que reciben tareas aparecen en el campo Responsable. ' +
     'El grupo las ordena dentro de esa lista.</p>' +
@@ -4004,14 +4011,16 @@ async function guardarUsuario(){
   if(mandan(p) && !mandan({ rol: rol }) &&
      (A.perfiles || []).filter(mandan).length <= 1)
     return avisar("Debe quedar al menos un administrador");
-  const antes = { rol: p.rol, asignable: p.asignable, grupo: p.grupo, nombre: p.nombre };
+  const antes = { rol: p.rol, asignable: p.asignable, grupo: p.grupo, nombre: p.nombre, zohoEmail: p.zohoEmail };
   p.nombre = val("u-nombre") || p.nombre;
   p.rol = rol;
   p.asignable = val("u-asignable") !== "No";
   p.grupo = val("u-grupo");
+  p.zohoEmail = val("u-zoho");
   try{
     await API.req("PATCH", "perfiles?id=eq." + encodeURIComponent(p.id),
-      { nombre: p.nombre, rol: p.rol, asignable: p.asignable, grupo: p.grupo || null }, "return=minimal");
+      { nombre: p.nombre, rol: p.rol, asignable: p.asignable, grupo: p.grupo || null,
+        zoho_email: p.zohoEmail || null }, "return=minimal");
     const cambios = [];
     if(antes.rol !== p.rol) cambios.push(nombreRol(antes.rol) + " → " + nombreRol(p.rol));
     if(antes.asignable !== p.asignable) cambios.push(p.asignable ? "recibe tareas" : "no recibe tareas");
@@ -4128,6 +4137,12 @@ async function sincronizarZoho(){
       A.ultimoError = "Zoho leyó " + j.leidas + " tareas pero no pudo guardarlas: " + j.errores.join(" · ");
       A.sinGuardar = true; pintar();
       return avisar("Zoho respondió, pero algo falló al guardar. Revisa el aviso rojo.");
+    }
+    if((j.sin_persona || []).length){
+      A.ultimoError = "Zoho: estas direcciones no calzan con ninguna cuenta de la app, así que sus tareas " +
+        "quedaron sin responsable: " + j.sin_persona.join(", ") +
+        ". Agrégalas en Ajustes → Administrar usuarios, en el campo Correo en Zoho.";
+      A.sinGuardar = true;
     }
     avisar("Zoho: leídas " + j.leidas + " · " + j.creadas + " nuevas · " + j.actualizadas + " actualizadas" +
       (j.omitidas ? " · " + j.omitidas + " sin cambios o fuera de fecha" : "") +
