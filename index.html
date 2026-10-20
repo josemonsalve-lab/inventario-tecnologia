@@ -4112,10 +4112,13 @@ async function llamarZoho(cuerpo){
   const r = await fetch(API.base() + "/functions/v1/zoho", {
     method: "POST", headers: API.cabeceras(), body: JSON.stringify(cuerpo || {})
   });
-  let j = {};
-  try{ j = await r.json(); }catch(e){}
+  let j = {}, crudo = "";
+  try{ crudo = await r.text(); j = JSON.parse(crudo); }catch(e){}
   if(r.status === 404) throw new Error("Falta instalar la función 'zoho' en Supabase.");
-  if(!r.ok) throw new Error(j.error || "Zoho respondió con un error");
+  if(r.status === 504 || r.status === 546)
+    throw new Error("La sincronización tardó demasiado y el servidor la cortó. " +
+      "Vuelve a intentarlo: lo ya guardado no se repite.");
+  if(!r.ok) throw new Error(j.error || ("Error " + r.status + (crudo ? ": " + crudo.slice(0, 200) : "")));
   return j;
 }
 
