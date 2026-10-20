@@ -4124,8 +4124,14 @@ async function sincronizarZoho(){
     A.zoho.ultima = new Date().toISOString();
     await sincronizar(true);
     pintar();
-    avisar("Zoho: " + j.creadas + " nuevas, " + j.actualizadas + " actualizadas" +
-      (j.modo === "dos_vias" ? ", " + j.enviadas + " enviadas" : " (solo lectura)"));
+    if((j.errores || []).length){
+      A.ultimoError = "Zoho leyó " + j.leidas + " tareas pero no pudo guardarlas: " + j.errores.join(" · ");
+      A.sinGuardar = true; pintar();
+      return avisar("Zoho respondió, pero algo falló al guardar. Revisa el aviso rojo.");
+    }
+    avisar("Zoho: leídas " + j.leidas + " · " + j.creadas + " nuevas · " + j.actualizadas + " actualizadas" +
+      (j.omitidas ? " · " + j.omitidas + " sin cambios o fuera de fecha" : "") +
+      (j.modo === "dos_vias" ? " · " + j.enviadas + " enviadas" : " (solo lectura)"));
   }catch(e){
     A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true; pintar();
     avisar("No se pudo sincronizar. Revisa el aviso rojo.");
