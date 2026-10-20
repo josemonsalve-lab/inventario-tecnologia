@@ -2569,7 +2569,25 @@ function perfilPorNombre(nombre){
   return gente.find(p => sinTildes(p.nombre || p.email || "") === sinTildes(nombre)) ||
          gente.find(p => mismaPersona(p.nombre || p.email || "", nombre)) || null;
 }
+/* Una misma persona puede tener dos cuentas en la app, por ejemplo una de
+   vendedor y otra de administrador. Para contar y graficar se usa siempre la
+   primera de ellas, así sus tareas no quedan repartidas en dos filas. */
+function perfilCanonico(p){
+  if(!p) return null;
+  const gente = (A.perfiles || []).slice()
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return gente.find(x => x.id === p.id ||
+    mismaPersona(x.nombre || x.email || "", p.nombre || p.email || "")) || p;
+}
+function perfilDeTarea(t){
+  const p = t.asignadoA ? (A.perfiles || []).find(x => x.id === t.asignadoA)
+                        : perfilPorNombre(t.asignadoNombre);
+  return perfilCanonico(p);
+}
+
 function claveDePersona(t){
+  const pc = perfilDeTarea(t);
+  if(pc) return "id:" + pc.id;
   if(t.asignadoA) return "id:" + t.asignadoA;
   const p = perfilPorNombre(t.asignadoNombre);
   if(p) return "id:" + p.id;
@@ -2580,8 +2598,7 @@ function claveDePersona(t){
   return "nom:" + (w.slice(0, 2).join(" ") || sinTildes(t.asignadoNombre));
 }
 function nombreDePersona(t){
-  const p = t.asignadoA ? (A.perfiles || []).find(x => x.id === t.asignadoA)
-                        : perfilPorNombre(t.asignadoNombre);
+  const p = perfilDeTarea(t);
   /* Si la cuenta no tiene nombre escrito, se usa el que venga en la tarea
      antes que mostrar un correo. */
   if(p && p.nombre) return p.nombre;
@@ -2589,10 +2606,14 @@ function nombreDePersona(t){
   if(p) return p.nombre || p.email;
   return t.asignadoNombre || "Sin responsable";
 }
+/* El grupo sale de cualquiera de sus cuentas: si una lo tiene definido, vale. */
 const grupoDe = t => {
-  const id = t.asignadoA || ((perfilPorNombre(t.asignadoNombre) || {}).id);
-  const p = (A.perfiles || []).find(x => x.id === id);
-  return p ? (p.grupo || "") : "";
+  const p = perfilDeTarea(t);
+  if(!p) return "";
+  if(p.grupo) return p.grupo;
+  const gemela = (A.perfiles || []).find(x => x.grupo &&
+    mismaPersona(x.nombre || x.email || "", p.nombre || p.email || ""));
+  return gemela ? gemela.grupo : "";
 };
 const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 /* La fecha de referencia de una tarea: la de vencimiento si la tiene, si no la de creación. */
@@ -2629,7 +2650,11 @@ function tareasFiltradas(){
   return A.tareas.filter(t => {
     if(A.filtroGrupo && grupoDe(t) !== A.filtroGrupo) return false;
     if(A.filtroPersona === "__sin"){ if(t.asignadoA) return false; }
-    else if(A.filtroPersona && claveDePersona(t) !== "id:" + A.filtroPersona) return false;
+    else if(A.filtroPersona){
+      const elegido = (A.perfiles || []).find(x => x.id === A.filtroPersona);
+      const canon = perfilCanonico(elegido);
+      if(claveDePersona(t) !== "id:" + (canon ? canon.id : A.filtroPersona)) return false;
+    }
     const f = fechaTarea(t);
     if(desde && (!f || f < desde)) return false;
     if(hasta && (!f || f > hasta)) return false;
@@ -3012,6 +3037,8 @@ function pintarFichaTarea(){
       (t.zohoId ? " Sincronizada con Zoho (" + esc(t.zohoId) + ")." : "") + '</p>' +
     (esSuper() ? '<button class="btn btn-linea btn-w" data-accion="editar-tarea">' +
       'Modificar la tarea y el responsable</button>' : "") +
+    (A.zoho.activo ? '<button class="btn btn-linea btn-w" data-accion="enviar-zoho">' +
+      (t.zohoId ? "Actualizar esta tarea en Zoho" : "Enviar esta tarea a Zoho") + '</button>' : "") +
     (puedeBorrar ? '<button class="btn btn-rojo btn-w" data-accion="borrar-tarea">Eliminar la tarea</button>' : ""),
     "Tarea");
 }
@@ -4237,6 +4264,13 @@ function modalUsuario(id){
     '<p class="mini" style="margin:0">Sirve para que las tareas de Zoho queden asignadas a esta persona ' +
     'cuando allá figura con otro correo.</p>' +
     '<datalist id="grupos">' + grupos.map(g => '<option value="' + esc(g) + '">').join("") + '</datalist>' +
+    (function(){
+      const otras = (A.perfiles || []).filter(x => x.id !== p.id &&
+        mismaPersona(x.nombre || x.email || "", p.nombre || p.email || ""));
+      return otras.length ? '<p class="aviso">Esta persona tiene otra cuenta en la app: ' +
+        esc(otras.map(x => x.email).join(", ")) + '. Las tareas de ambas se cuentan juntas en las ' +
+        'estadísticas, pero conviene dejar una sola.</p>' : "";
+    })() +
     '<p class="mini" style="margin:0">Solo las personas que reciben tareas aparecen en el campo Responsable. ' +
     'El grupo las ordena dentro de esa lista.</p>' +
     '<button class="btn btn-celeste btn-w" data-accion="guardar-usuario">Guardar</button>' +
@@ -4366,10 +4400,39 @@ async function llamarZoho(cuerpo){
   return j;
 }
 
-/* Envía una tarea en segundo plano: si falla, no interrumpe el trabajo. */
+/* Envía una tarea en segundo plano. No interrumpe el trabajo, pero si falla
+   deja el aviso a la vista en lugar de esconderlo en la consola. */
 function empujarAZoho(id){
   if(!REMOTO || !A.zoho.activo || A.zoho.modo !== "dos_vias") return;
-  llamarZoho({ accion: "empujar", id: id }).catch(e => console.warn("Zoho:", e.message));
+  llamarZoho({ accion: "empujar", id: id })
+    .then(j => { if(j && j.zoho_id) avisar("Enviada a Zoho"); })
+    .catch(e => {
+      console.warn("Zoho:", e.message);
+      A.ultimoError = "No se pudo enviar la tarea a Zoho: " + e.message;
+      A.sinGuardar = true;
+      pintar();
+    });
+}
+
+/* Envío manual desde la ficha, con el resultado a la vista. */
+async function enviarTareaAZoho(){
+  const t = A.tareas.find(x => x.id === ctx.id);
+  if(!t) return;
+  if(!A.zoho.activo) return avisar("Falta configurar Zoho en Ajustes");
+  if(A.zoho.modo !== "dos_vias")
+    return avisar("La integración está en solo lectura. Cámbiala a dos direcciones en Ajustes.");
+  avisar("Enviando a Zoho…");
+  try{
+    const j = await llamarZoho({ accion: "empujar", id: t.id });
+    t.zohoId = j.zoho_id || t.zohoId;
+    await sincronizar(true);
+    cerrarModal(); pintar();
+    avisar(j.zoho_id ? "Creada en Zoho con el número " + j.zoho_id : "Enviada a Zoho");
+  }catch(e){
+    A.ultimoError = "Zoho: " + e.message; A.sinGuardar = true;
+    cerrarModal(); pintar();
+    avisar("No se pudo enviar. Revisa el aviso rojo.");
+  }
 }
 
 async function sincronizarZoho(reasignar){
@@ -4993,6 +5056,7 @@ document.addEventListener("click", async ev => {
     return;
   }
   if(a === "pdf-reparacion") return reparacionPDF();
+  if(a === "enviar-zoho") return enviarTareaAZoho();
   if(a === "editar-tarea") return editarTarea(ctx.id);
   if(a === "revisar-tarea"){ leerTareaNueva(); ctx.paso = 2; return pintarTareaNueva(); }
   if(a === "volver-tarea"){ ctx.paso = 1; return pintarTareaNueva(); }
