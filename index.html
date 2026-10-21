@@ -4498,8 +4498,14 @@ async function modalZoho(){
       esc(cfg.zoho_proyecto) + '" placeholder="987654321"></label></div>' +
     '<p class="mini" style="margin:0">Los dos números salen de la dirección cuando abres el proyecto en Zoho: ' +
     'projects.zoho.com/portal/<b>portal</b>#taskdetail/<b>proyecto</b>/…</p>' +
-    (cfg.zoho_ultima_sync ? '<div class="fila"><div class="t"><b>Última sincronización</b><span>' +
-      esc(new Date(cfg.zoho_ultima_sync).toLocaleString("es-CL")) + '</span></div></div>' : "") +
+    (cfg.zoho_ultima_sync ? (function(){
+      const mins = Math.round((Date.now() - new Date(cfg.zoho_ultima_sync).getTime()) / 60000);
+      return '<div class="fila"><div class="t"><b>Última sincronización</b><span>' +
+        esc(new Date(cfg.zoho_ultima_sync).toLocaleString("es-CL")) +
+        (mins < 60 ? " · hace " + mins + " min" : "") + '</span>' +
+        (mins > 60 ? '<span class="mini">Si tienes la sincronización automática activada, debería ' +
+          'correr cada 15 minutos.</span>' : "") + '</div></div>';
+    })() : "") +
     '<div class="f2"><label class="f"><span>Estado al cerrar</span><input class="inp" id="z-cerrado" value="' +
       esc(cfg.zoho_estado_cerrado) + '" placeholder="Finalizado"></label>' +
     '<label class="f"><span>Estado al reabrir</span><input class="inp" id="z-abierto" value="' +
