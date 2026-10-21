@@ -2477,6 +2477,26 @@ function vistaPanel(){
     valor: ts.filter(t => pendiente(t) && (t.prioridad || "Normal") === p).length,
     color: ["#c0392b", "#00baff", "#9aa7b1"][i], ir: { vista: "tareas", chip: "Pendientes" } }));
 
+  /* proveedores: cuántos equipos vinieron de cada uno y cuánto se invirtió */
+  const porProv = A.proveedores.map((p, i) => {
+    const suyos = us.filter(u => u.proveedorId === p.id);
+    return { nombre: p.nombre, valor: suyos.length, color: COLORES_PANEL[i % COLORES_PANEL.length],
+      ir: { vista: "proveedores", q: p.nombre },
+      invertido: suyos.reduce((a, u) => a + (Number(u.costo) || 0), 0),
+      disponibles: suyos.filter(u => u.situacion === "Disponible").length,
+      facturas: facturasDe(p.id).length, plazo: p.plazo || 0 };
+  }).filter(x => x.valor > 0).sort((a, b) => b.valor - a.valor);
+  const sinProv = us.filter(u => !u.proveedorId).length;
+  const compradoProv = porProv.reduce((a, x) => a + x.valor, 0);
+  const invertido = porProv.reduce((a, x) => a + x.invertido, 0);
+
+  const donaProv = porProv.slice(0, 6).map((x, i) => Object.assign({}, x, { color: COLORES_PANEL[i] }));
+  if(porProv.length > 6)
+    donaProv.push({ nombre: "Otros " + (porProv.length - 6), color: COLORES_PANEL[6],
+      valor: porProv.slice(6).reduce((a, x) => a + x.valor, 0), ir: { vista: "proveedores" } });
+  if(sinProv) donaProv.push({ nombre: "Sin proveedor", valor: sinProv, color: "#cbd5dd",
+    ir: { vista: "equipos" } });
+
   /* taller */
   const mant = A.mantenimientos || [];
   const porTaller = EST_TALLER.map((e, i) => ({ nombre: e, valor: mant.filter(m => m.estado === e).length,
@@ -2489,6 +2509,8 @@ function vistaPanel(){
       '<tr><td>Modelos bajo mínimo</td><td' + (bajos ? ' style="color:var(--rojo)"' : "") + '>' +
         nf.format(bajos) + '</td></tr>' +
       '<tr><td>Valor del stock disponible</td><td>' + uf2(valorUF) + ' UF</td></tr>' +
+      '<tr><td>Proveedores con compras</td><td>' + nf.format(porProv.length) +
+        (invertido ? " · " + clp(invertido) + " invertidos" : "") + '</td></tr>' +
       '<tr><td>Tareas pendientes</td><td>' + nf.format(pend) +
         (venc ? ' · <span style="color:var(--rojo)">' + venc + ' vencidas</span>' : "") + '</td></tr>' +
     '</table></div>' +
@@ -2505,6 +2527,22 @@ function vistaPanel(){
     tarjetaPanel("Pendientes por prioridad",
       dona(porPrio, (pend ? Math.round(porPrio[0].valor / pend * 100) : 0) + "%", "de prioridad alta"),
       { vista: "tareas", chip: "Pendientes" }) +
+    tarjetaPanel("Equipos comprados por proveedor",
+      dona(donaProv, (us.length ? Math.round(compradoProv / us.length * 100) : 0) + "%",
+        "con proveedor") +
+      (porProv.length
+        ? '<div class="lista" style="margin-top:10px">' + porProv.slice(0, 8).map(x =>
+            '<button class="fila" data-ir="proveedores" data-irq="' + esc(x.nombre) + '">' +
+            '<div class="t"><b>' + esc(x.nombre) + '</b><span>' +
+              x.disponibles + ' disponibles · ' + x.facturas +
+              (x.facturas === 1 ? " factura" : " facturas") +
+              (x.plazo ? " · reposición " + x.plazo + " días" : "") + '</span>' +
+            (x.invertido ? '<span>Invertido: ' + clp(x.invertido) + '</span>' : "") + '</div>' +
+            '<div style="text-align:right"><b style="color:var(--azul)">' + nf.format(x.valor) + '</b>' +
+            '<span class="mini" style="display:block">equipos</span></div></button>').join("") + '</div>'
+        : ""),
+      { vista: "proveedores" }) +
+
     (mant.length ? tarjetaPanel("Taller",
       dona(porTaller, Math.round(mant.filter(enTaller).length / mant.length * 100) + "%", "en taller ahora"),
       { vista: "taller" }) : "") +
