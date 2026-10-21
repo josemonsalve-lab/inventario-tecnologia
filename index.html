@@ -158,6 +158,21 @@ details summary::-webkit-details-marker{display:none}
 .tarjeta-login h2{margin:0;font-size:19px;font-weight:900;color:var(--azul)}
 .tarjeta-login .logo{height:40px;width:auto;align-self:flex-start;margin-bottom:2px}
 .tarjeta-login p{margin:0}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.kpi{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:12px 12px 6px;
+  display:block;width:100%;text-align:left}
+.kpi-t{display:block;font-size:10.5px;color:var(--n500);line-height:1.2;min-height:25px}
+.kpi-v{display:block;font-size:24px;font-weight:900;color:var(--azul);margin:2px 0 4px}
+.dona{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.dona svg{flex-shrink:0}
+.dona-leyenda{flex:1;min-width:150px;display:flex;flex-direction:column;gap:4px}
+.dona-leyenda div,.dona-leyenda .leyenda-ir{display:flex;align-items:center;gap:7px;font-size:11.5px;
+  width:100%;text-align:left;padding:2px 0}
+.dona-leyenda .leyenda-ir:active{background:var(--fondo);border-radius:6px}
+.dona-leyenda i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.dona-leyenda span{flex:1;color:var(--n700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dona-leyenda b{color:var(--azul)}
+.dona-leyenda em{font-style:normal;color:var(--n500);min-width:30px;text-align:right}
 .graf{display:flex;flex-direction:column;gap:5px}
 .graf-fila{display:flex;align-items:center;gap:8px}
 .graf-et{font-size:11px;color:var(--n700);width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -193,6 +208,41 @@ details summary::-webkit-details-marker{display:none}
 .previa-fotos{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 14px}
 .previa-fotos img{width:100%;border-radius:8px;display:block}
 .enlace{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--cielo);color:var(--azul);padding:12px 15px;border-radius:12px;font-weight:700;text-decoration:none;font-size:14px}
+
+/* ====================== versión de escritorio ======================
+   En pantallas anchas la barra inferior pasa a ser un menú lateral y el
+   contenido se reparte en columnas, aprovechando el espacio disponible. */
+@media (min-width: 900px){
+  body{padding-bottom:0}
+  header{left:232px;padding-left:22px}
+  nav{top:0;bottom:0;left:0;right:auto;width:232px;flex-direction:column;
+    align-items:stretch;justify-content:flex-start;gap:2px;padding:18px 12px;
+    border-top:0;border-right:1px solid var(--linea);overflow-y:auto}
+  nav::before{content:"";display:block;height:52px;background:no-repeat center/120px url("logo-rex.png");
+    margin:0 0 14px}
+  nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:12px;
+    padding:11px 14px;border-radius:12px;font-size:13.5px}
+  nav button span:last-child{max-width:none;font-size:13.5px}
+  nav button.on{background:var(--cielo)}
+  nav .globo{position:static;margin-left:auto}
+  main{margin-left:232px;max-width:1100px;padding:0 22px 40px}
+  #fab{left:auto;right:36px;bottom:36px}
+
+  /* más columnas donde tiene sentido */
+  .grid{grid-template-columns:repeat(auto-fill,minmax(225px,1fr))}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .f2{grid-template-columns:1fr 1fr}
+  .hoja{max-width:720px}            /* la ventana ya se centra sola desde 620px */
+  .previa{max-width:820px}
+  .dona{gap:28px}
+}
+
+/* En pantallas muy anchas, el panel reparte las tarjetas en dos columnas */
+@media (min-width: 1300px){
+  main{max-width:1280px}
+  .panel-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+}
+
 </style>
 </head>
 <body>
@@ -595,8 +645,9 @@ const A = {
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
-  vista: "stock", q: "", filtro: "Todas", filtroModelo: "", filtroTipo: "", filtroSit: {}, filtroPersona: "",
+  vista: "panel", q: "", filtro: "Todas", filtroModelo: "", filtroTipo: "", filtroSit: {}, filtroPersona: "",
   periodoT: "todo", desdeT: "", hastaT: "", ordenT: "recientes", filtroGrupo: "",
+  panelGrupo: "General", panelPeriodo: "todo",
   soloBajos: false, sinGuardar: false
 };
 const esAdmin = () => A.rol === "admin" || A.rol === "super";
@@ -811,14 +862,16 @@ const ICO = {
   cuenta: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 21a7 7 0 0114 0",
   cotiza: "M7 3h10v18H7zM10 7h4M10 11h4M10 15h4",
   taller: "M14.7 6.3a4 4 0 01-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2z",
+  panel: "M12 3a9 9 0 109 9h-9z M13 3v8h8a8 8 0 00-8-8z",
   tareas: "M9 11l2 2 4-4M4 5h16v16H4zM9 3h6v2H9z"
 };
-const NAV_ADMIN = [["tareas","Tareas"],["taller","Taller"],["proveedores","Proveedores"],["stock","Stock"],
-  ["equipos","Equipos"],["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
-const NAV_VEND  = [["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
+const NAV_ADMIN = [["panel","Panel"],["tareas","Tareas"],["taller","Taller"],["proveedores","Proveedores"],
+  ["stock","Stock"],["equipos","Equipos"],["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
+const NAV_VEND  = [["panel","Panel"],["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
 const nav = () => esAdmin() ? NAV_ADMIN : NAV_VEND;
 const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", proveedores:"Proveedores",
-  movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
+  movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes",
+  panel:"Panel", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
 
 function pintarNav(){
   document.getElementById("nav").innerHTML = nav().map(([id,txt]) => {
@@ -2154,6 +2207,311 @@ async function reportePDFInterno(){
   }
 }
 
+/* ------------------------------------------------------------- panel */
+const COLORES_PANEL = ["#00baff", "#beda69", "#0a5c85", "#f0a830", "#c0392b", "#8e7cc3", "#9aa7b1"];
+
+/* Dona en SVG: cada porción es un trazo sobre la misma circunferencia. */
+function dona(items, centro, subcentro){
+  const total = items.reduce((a, x) => a + x.valor, 0);
+  if(!total) return '<p class="mini">Sin datos.</p>';
+  const R = 52, C = 2 * Math.PI * R, GROSOR = 26;
+  const visibles = items.filter(x => x.valor > 0);
+  const varias = visibles.length > 1;
+  /* Las porciones se dibujan una sobre otra, con las puntas redondeadas y sin
+     separación: así la punta convexa de cada una se mete en la anterior y
+     quedan encajadas, en vez de dejar un hueco entre ellas. */
+  let acum = 0;
+  const arcos = visibles.map(x => {
+    const frac = x.valor / total;
+    const largo = Math.max(frac * C, 0.8);
+    const trazo = '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="' + x.color +
+      '" stroke-width="' + GROSOR + '" stroke-linecap="' + (varias ? "round" : "butt") + '"' +
+      ' stroke-dasharray="' + largo.toFixed(2) + ' ' + Math.max(C - largo, 0.01).toFixed(2) +
+      '" stroke-dashoffset="' + (-(acum * C)).toFixed(2) + '" transform="rotate(-90 70 70)"></circle>';
+    acum += frac;
+    return trazo;
+  }).join("");
+  return '<div class="dona">' +
+    '<svg viewBox="0 0 140 140" width="140" height="140">' +
+      '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="#e4ebf1" stroke-width="' + GROSOR + '"></circle>' +
+      arcos +
+      '<text x="70" y="' + (subcentro ? 68 : 76) + '" text-anchor="middle" font-size="23" font-weight="700" ' +
+        'fill="#0a5c85" font-family="inherit">' + esc(centro) + '</text>' +
+      (subcentro ? '<text x="70" y="86" text-anchor="middle" font-size="9.5" fill="#68808d">' +
+        esc(subcentro) + '</text>' : "") +
+    '</svg>' +
+    '<div class="dona-leyenda">' + items.filter(x => x.valor > 0).map(x => {
+      const dentro = '<i style="background:' + x.color + '"></i>' +
+        '<span>' + esc(x.nombre) + '</span>' +
+        '<b>' + nf.format(x.valor) + '</b>' +
+        '<em>' + Math.round(x.valor / total * 100) + '%</em>';
+      return x.ir
+        ? '<button class="leyenda-ir" ' + atributosIr(x.ir) + '>' + dentro + '</button>'
+        : '<div>' + dentro + '</div>';
+    }).join("") + '</div></div>';
+}
+
+/* El vendedor ve solo lo del stock, calculado desde la vista de disponibilidad:
+   nunca recibe series, clientes ni costos. */
+function panelVendedor(){
+  const ms = modelosVisibles();
+  const dato = cod => (A.dispo || []).find(d => d.codigo === cod) || {};
+  const filas = ms.map(m => {
+    const d = dato(m.codigo);
+    return { m: m, disp: Number(d.disponibles) || 0, res: Number(d.reservados) || 0,
+             total: Number(d.total) || 0 };
+  });
+  const disp = filas.reduce((a, x) => a + x.disp, 0);
+  const res = filas.reduce((a, x) => a + x.res, 0);
+  const conStock = filas.filter(x => x.disp > 0).length;
+  const sinStock = filas.filter(x => x.disp === 0).length;
+
+  const porCat = {};
+  for(const x of filas){
+    const c = x.m.categoria || "Sin categoría";
+    porCat[c] = (porCat[c] || 0) + x.disp;
+  }
+  const cats = Object.keys(porCat).filter(c => porCat[c] > 0).sort((a, b) => porCat[b] - porCat[a])
+    .map((c, i) => ({ nombre: c, valor: porCat[c], color: COLORES_PANEL[i % COLORES_PANEL.length],
+      ir: { vista: "stock", cat: c } }));
+
+  const top = filas.filter(x => x.disp > 0).sort((a, b) => b.disp - a.disp).slice(0, 5)
+    .map((x, i) => ({ nombre: x.m.codigo, valor: x.disp, color: COLORES_PANEL[i],
+      ir: { vista: "dispo", q: x.m.codigo } }));
+  const resto = filas.filter(x => x.disp > 0).sort((a, b) => b.disp - a.disp).slice(5)
+    .reduce((a, x) => a + x.disp, 0);
+  if(resto) top.push({ nombre: "Otros modelos", valor: resto, color: COLORES_PANEL[6] });
+
+  return '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+      '<tr><td>Equipos disponibles</td><td>' + nf.format(disp) + '</td></tr>' +
+      '<tr><td>Reservados</td><td>' + nf.format(res) + '</td></tr>' +
+      '<tr><td>Modelos con stock</td><td>' + nf.format(conStock) + ' de ' + nf.format(ms.length) + '</td></tr>' +
+      '<tr><td>Modelos agotados</td><td' + (sinStock ? ' style="color:var(--rojo)"' : "") + '>' +
+        nf.format(sinStock) + '</td></tr>' +
+    '</table></div>' +
+    tarjetaPanel("Disponibles por categoría",
+      dona(cats, nf.format(disp), "disponibles"), { vista: "stock" }) +
+    tarjetaPanel("Modelos con stock",
+      dona([{ nombre: "Con stock", valor: conStock, color: "#beda69", ir: { vista: "dispo" } },
+            { nombre: "Agotados", valor: sinStock, color: "#c0392b", ir: { vista: "stock" } }],
+           (ms.length ? Math.round(conStock / ms.length * 100) : 0) + "%", "del catálogo"),
+      { vista: "dispo" }) +
+    tarjetaPanel("Modelos con más disponibles", dona(top, nf.format(disp), "equipos"),
+      { vista: "dispo" }) +
+    (sinStock ? '<div class="sec">Agotados</div><div class="lista">' +
+      filas.filter(x => x.disp === 0).slice(0, 10).map(x => {
+        const p = proveedor(x.m.proveedorId);
+        return '<button class="fila" data-modelo="' + x.m.id + '"><div class="t"><b>' +
+          esc(x.m.nombre || x.m.modelo || x.m.codigo) + '</b><span>' + esc(x.m.codigo) +
+          (p && p.plazo ? " · reposición " + p.plazo + " días" : "") + '</span></div>' +
+          '<span class="pt pt-baja">Sin stock</span></button>';
+      }).join("") + '</div>' : "") +
+    '<p class="mini" style="margin:10px 0 0">Los datos se actualizan solos con el inventario de bodega.</p>';
+}
+
+/* Convierte un destino en atributos para el delegador de eventos. */
+function atributosIr(ir){
+  return Object.keys(ir).map(k => 'data-ir' + (k === "vista" ? "" : k) + '="' + esc(ir[k]) + '"').join(" ");
+}
+
+function tarjetaPanel(titulo, contenido, ir){
+  return '<div class="fila" style="display:block;margin-bottom:12px">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+      '<b style="flex:1;color:var(--azul);font-size:13px">' + esc(titulo) + '</b>' +
+      (ir ? '<button class="btn btn-linea btn-sm" ' + atributosIr(ir) + '>Ver más</button>' : "") +
+    '</div>' + contenido + '</div>';
+}
+
+/* ------------------------------------- panel por área (estilo tablero) */
+const PERIODOS_PANEL = [["mes","Mes"],["anio","Año"],["todo","Total"]];
+
+function mesesAtras(n){
+  const hoyD = new Date(hoy() + "T12:00:00"), out = [];
+  for(let i = n - 1; i >= 0; i--){
+    const d = new Date(hoyD.getFullYear(), hoyD.getMonth() - i, 1);
+    out.push({ k: d.toISOString().slice(0, 7),
+      etiqueta: MESES[d.getMonth()] + " " + String(d.getFullYear()).slice(2) });
+  }
+  return out;
+}
+
+function desdePanel(){
+  const hoyD = new Date(hoy() + "T12:00:00");
+  if(A.panelPeriodo === "mes") return hoy().slice(0, 7) + "-01";
+  if(A.panelPeriodo === "anio") return hoyD.getFullYear() + "-01-01";
+  return "";
+}
+
+/* Minigráfico de tendencia: una línea simple sobre doce meses. */
+function tendencia(valores, color){
+  const max = Math.max(...valores, 1), an = 150, al = 34;
+  const paso = valores.length > 1 ? an / (valores.length - 1) : an;
+  const pts = valores.map((v, i) => (i * paso).toFixed(1) + "," + (al - 2 - (v / max) * (al - 6)).toFixed(1));
+  return '<svg viewBox="0 0 ' + an + ' ' + al + '" width="100%" height="' + al + '" preserveAspectRatio="none">' +
+    '<polyline fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" ' +
+    'stroke-linecap="round" points="' + pts.join(" ") + '"></polyline></svg>';
+}
+
+function tarjetaKPI(titulo, valor, valores, color, ir){
+  return '<div class="kpi"' + (ir ? " " + atributosIr(ir) : "") + '>' +
+    '<span class="kpi-t">' + esc(titulo) + '</span>' +
+    '<b class="kpi-v">' + esc(valor) + '</b>' +
+    tendencia(valores, color || "#0a5c85") + '</div>';
+}
+
+function vistaPanelArea(grupo){
+  const desde = desdePanel();
+  const meses = mesesAtras(12);
+  const enPeriodo = f => !desde || (f && String(f).slice(0, 10) >= desde);
+
+  /* tareas del área */
+  const suyas = A.tareas.filter(t => grupoDe(t) === grupo);
+  const ts = suyas.filter(t => enPeriodo(fechaTarea(t)));
+  const cerradas = ts.filter(t => !pendiente(t));
+  const pend = suyas.filter(pendiente);
+  const venc = suyas.filter(vencida);
+
+  /* días que tardan en cerrarse */
+  const dias = cerradas.map(t => {
+    const a = String(t.creada || "").slice(0, 10), b = String(t.cerrada || "").slice(0, 10);
+    if(!a || !b) return null;
+    return Math.max(0, Math.round((new Date(b) - new Date(a)) / 86400000));
+  }).filter(x => x !== null);
+  const prom = dias.length ? (dias.reduce((a, b) => a + b, 0) / dias.length) : 0;
+
+  /* taller */
+  const mant = (A.mantenimientos || []).filter(m => enPeriodo(m.fechaIngreso));
+  const costo = mant.reduce((a, m) => a + (Number(m.costo) || 0), 0);
+
+  /* series mensuales */
+  const serie = (lista, campo) => meses.map(m =>
+    lista.filter(x => String(x[campo] || "").slice(0, 7) === m.k).length);
+  const creadasMes = serie(suyas, "creada");
+  const cerradasMes = serie(suyas.filter(t => !pendiente(t)), "cerrada");
+  const tallerMes = serie(A.mantenimientos || [], "fechaIngreso");
+  const entregasMes = serie(A.unidades, "entrega");
+
+  const barrasDobles = meses.map((m, i) => ({ etiqueta: m.etiqueta, hechas: cerradasMes[i],
+    pend: Math.max(0, creadasMes[i] - cerradasMes[i]), total: creadasMes[i] }));
+  const barrasTaller = meses.map((m, i) => ({ etiqueta: m.etiqueta, hechas: tallerMes[i], pend: 0,
+    total: tallerMes[i] }));
+  const barrasEntregas = meses.map((m, i) => ({ etiqueta: m.etiqueta, hechas: entregasMes[i], pend: 0,
+    total: entregasMes[i] }));
+
+  /* por persona del área */
+  const porP = {};
+  for(const t of ts){
+    const k = claveDePersona(t);
+    const x = porP[k] = porP[k] || { nombre: nombreDePersona(t), total: 0, pend: 0, hechas: 0 };
+    x.total++;
+    if(pendiente(t)) x.pend++; else x.hechas++;
+  }
+  const personas = Object.values(porP).sort((a, b) => b.total - a.total).slice(0, 8);
+
+  return '<div class="kpis">' +
+      tarjetaKPI("Tareas cerradas", nf.format(cerradas.length), cerradasMes, "#beda69",
+        { vista: "tareas", chip: "Hechas" }) +
+      tarjetaKPI("Pendientes", nf.format(pend.length), creadasMes, "#00baff",
+        { vista: "tareas", chip: "Pendientes" }) +
+      tarjetaKPI("Días promedio de cierre", prom ? prom.toFixed(1) : "—", cerradasMes, "#0a5c85") +
+      tarjetaKPI("Equipos al taller", nf.format(mant.length), tallerMes, "#f0a830",
+        { vista: "taller" }) +
+    '</div>' +
+
+    (venc.length ? '<p class="aviso" style="margin:0 0 12px">' + venc.length +
+      (venc.length === 1 ? " tarea vencida" : " tareas vencidas") + ' en el área.</p>' : "") +
+
+    tarjetaPanel("Trabajo por persona", barrasH(personas), { vista: "tareas", chip: "Por persona" }) +
+    tarjetaPanel("Tareas por mes · creadas y cerradas", barrasMes(barrasDobles),
+      { vista: "tareas", chip: "Estadísticas" }) +
+    tarjetaPanel("Ingresos al taller por mes", barrasMes(barrasTaller), { vista: "taller" }) +
+    tarjetaPanel("Equipos entregados por mes", barrasMes(barrasEntregas), { vista: "equipos" }) +
+    (costo ? '<p class="mini" style="margin:0">Costo de reparaciones en el período: ' +
+      clp(costo) + '.</p>' : "");
+}
+
+function vistaPanel(){
+  if(!esAdmin()) return panelVendedor();
+
+  const grupos = [...new Set((A.perfiles || []).map(p => p.grupo).filter(Boolean))].sort();
+  const cabecera = grupos.length
+    ? '<div class="chips">' + ["General", ...grupos].map(g =>
+        '<button class="chip ' + ((A.panelGrupo || "General") === g ? "on" : "") +
+        '" data-pgrupo="' + esc(g) + '">' + esc(g) + '</button>').join("") + '</div>' +
+      ((A.panelGrupo && A.panelGrupo !== "General")
+        ? '<div class="chips" style="padding-top:0">' + PERIODOS_PANEL.map(([k, t]) =>
+            '<button class="chip ' + ((A.panelPeriodo || "todo") === k ? "on" : "") +
+            '" data-pperiodo="' + k + '">' + t + '</button>').join("") + '</div>' : "")
+    : '<p class="mini" style="margin:0 0 10px">Para ver un tablero por área, asigna el grupo de cada ' +
+      'persona en Ajustes → Administrar usuarios. Después aparecerán acá los botones de cada área.</p>';
+
+  if(A.panelGrupo && A.panelGrupo !== "General")
+    return cabecera + vistaPanelArea(A.panelGrupo);
+
+  const us = A.unidades;
+  const porSit = SITUACIONES.map((s, i) => ({ nombre: s, valor: us.filter(u => u.situacion === s).length,
+    color: COLORES_PANEL[i % COLORES_PANEL.length], ir: { vista: "equipos", sit: s } }));
+  const disp = us.filter(u => u.situacion === "Disponible").length;
+
+  /* modelos con más stock, el resto agrupado */
+  const porModelo = A.modelos.map(m => ({ nombre: m.codigo, valor: unidadesDe(m.codigo).length }))
+    .filter(x => x.valor > 0).sort((a, b) => b.valor - a.valor);
+  const top = porModelo.slice(0, 5).map((x, i) => Object.assign(x, { color: COLORES_PANEL[i],
+    ir: { vista: "equipos", modelo: x.nombre } }));
+  const resto = porModelo.slice(5).reduce((a, x) => a + x.valor, 0);
+  if(resto) top.push({ nombre: "Otros " + (porModelo.length - 5) + " modelos", valor: resto, color: COLORES_PANEL[6] });
+
+  const bajos = A.modelos.filter(m => (m.minimo || 0) > 0 && disponiblesDe(m.codigo) < m.minimo).length;
+  const valorUF = A.modelos.reduce((a, m) => a + disponiblesDe(m.codigo) * (m.ventaUF || 0), 0);
+
+  /* tareas */
+  const ts = A.tareas;
+  const hechas = ts.filter(t => !pendiente(t)).length;
+  const pend = ts.length - hechas;
+  const venc = ts.filter(vencida).length;
+  const porEstadoT = [
+    { nombre: "Cerradas", valor: hechas, color: "#beda69", ir: { vista: "tareas", chip: "Hechas" } },
+    { nombre: "Pendientes al día", valor: pend - venc, color: "#00baff", ir: { vista: "tareas", chip: "Pendientes" } },
+    { nombre: "Vencidas", valor: venc, color: "#c0392b", ir: { vista: "tareas", chip: "Vencidas" } }];
+  const porPrio = PRIORIDADES.map((p, i) => ({ nombre: p,
+    valor: ts.filter(t => pendiente(t) && (t.prioridad || "Normal") === p).length,
+    color: ["#c0392b", "#00baff", "#9aa7b1"][i], ir: { vista: "tareas", chip: "Pendientes" } }));
+
+  /* taller */
+  const mant = A.mantenimientos || [];
+  const porTaller = EST_TALLER.map((e, i) => ({ nombre: e, valor: mant.filter(m => m.estado === e).length,
+    color: COLORES_PANEL[i % COLORES_PANEL.length], ir: { vista: "taller", chip: e } }));
+
+  return cabecera + '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+      '<tr><td>Equipos registrados</td><td>' + nf.format(us.length) + '</td></tr>' +
+      '<tr><td>Disponibles</td><td>' + nf.format(disp) +
+        (us.length ? " · " + Math.round(disp / us.length * 100) + "%" : "") + '</td></tr>' +
+      '<tr><td>Modelos bajo mínimo</td><td' + (bajos ? ' style="color:var(--rojo)"' : "") + '>' +
+        nf.format(bajos) + '</td></tr>' +
+      '<tr><td>Valor del stock disponible</td><td>' + uf2(valorUF) + ' UF</td></tr>' +
+      '<tr><td>Tareas pendientes</td><td>' + nf.format(pend) +
+        (venc ? ' · <span style="color:var(--rojo)">' + venc + ' vencidas</span>' : "") + '</td></tr>' +
+    '</table></div>' +
+
+    tarjetaPanel("Equipos por situación",
+      dona(porSit, (us.length ? Math.round(disp / us.length * 100) : 0) + "%", "disponibles"),
+      { vista: "equipos" }) +
+    tarjetaPanel("Dónde está el stock",
+      dona(top, (us.length && top.length ? Math.round(top[0].valor / us.length * 100) : 0) + "%",
+        top.length ? "en " + top[0].nombre : ""), { vista: "stock" }) +
+    tarjetaPanel("Estado de las tareas",
+      dona(porEstadoT, (ts.length ? Math.round(hechas / ts.length * 100) : 0) + "%", "cerradas"),
+      { vista: "tareas", chip: "Todo" }) +
+    tarjetaPanel("Pendientes por prioridad",
+      dona(porPrio, (pend ? Math.round(porPrio[0].valor / pend * 100) : 0) + "%", "de prioridad alta"),
+      { vista: "tareas", chip: "Pendientes" }) +
+    (mant.length ? tarjetaPanel("Taller",
+      dona(porTaller, Math.round(mant.filter(enTaller).length / mant.length * 100) + "%", "en taller ahora"),
+      { vista: "taller" }) : "") +
+    '<p class="mini" style="margin:0">Las cifras salen de todo el inventario y de todas las tareas. ' +
+    'Para analizar un período o una persona, usa los otros reportes o las estadísticas de Tareas.</p>';
+}
+
 function vistaReportes(){
   const R = generarReporte();
   const r = A.rep;
@@ -3079,7 +3437,7 @@ async function borrarTarea(){
 }
 
 function pintar(){
-  if(!nav().some(n => n[0] === A.vista) && A.vista !== "cotiza") A.vista = "stock";
+  if(!nav().some(n => n[0] === A.vista) && A.vista !== "cotiza") A.vista = "panel";
   const nombreRep = (REPORTES.find(x => x[0] === A.rep.tipo) || ["", ""])[1];
   document.getElementById("titulo").textContent =
     A.vista === "reportes" ? "Reportes · " + nombreRep
@@ -3089,7 +3447,7 @@ function pintar(){
     ["movs","ajustes","cotiza","reportes"].indexOf(A.vista) >= 0;
   const v = { stock: vistaStock, equipos: vistaEquipos, proveedores: vistaProveedores, movs: vistaMovs,
     ajustes: vistaAjustes, dispo: vistaDisponibilidad, cuenta: vistaCuenta, cotiza: vistaCotizador,
-    reportes: vistaReportes, taller: vistaTaller, tareas: vistaTareas }[A.vista];
+    reportes: vistaReportes, taller: vistaTaller, tareas: vistaTareas, panel: vistaPanel }[A.vista];
   document.getElementById("vista").innerHTML =
     (!REMOTO && location.protocol.indexOf("http") === 0
       ? '<div class="aviso" style="margin-top:14px;background:#fff4e0;color:#a76a00">' +
@@ -4815,13 +5173,31 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy],[data-ir],[data-pgrupo],[data-pperiodo]");
   if(!t) return;
   const d = t.dataset;
 
   if(d.velo && ev.target === t) return cerrarModal();
   if(d.cerrar) return cerrarModal();
 
+  if(d.pgrupo){ A.panelGrupo = d.pgrupo; return pintar(); }
+  if(d.pperiodo){ A.panelPeriodo = d.pperiodo; return pintar(); }
+
+  /* Ir desde el panel a la pantalla que corresponde, ya filtrada. */
+  if(d.ir){
+    A.vista = d.ir;
+    A.filtro = "Todas"; A.filtroModelo = ""; A.filtroTipo = ""; A.filtroSit = {};
+    A.filtroPersona = ""; A.filtroGrupo = ""; A.soloBajos = false; A.periodoT = "todo";
+    A.q = d.irq || "";
+    const campo = document.getElementById("q");
+    if(campo) campo.value = A.q;
+    if(d.irsit) A.filtroSit[d.irsit] = true;
+    if(d.irmodelo) A.filtroModelo = d.irmodelo;
+    if(d.irchip) A.filtro = d.irchip;
+    if(A.panelGrupo && A.panelGrupo !== "General") A.filtroGrupo = A.panelGrupo;
+    if(d.ircat) A.filtro = d.ircat;
+    return pintar();
+  }
   if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.filtroTipo = ""; A.filtroSit = {};
     A.filtroPersona = ""; A.filtroGrupo = "";
     A.soloBajos = false; A.q = ""; document.getElementById("q").value = ""; return pintar(); }
@@ -4902,7 +5278,7 @@ document.addEventListener("click", async ev => {
   }
   if(a === "ver-vendedor"){
     if(esAdmin()){ calcularDispoLocal(); A.rol = "vendedor"; } else A.rol = "admin";
-    A.vista = "stock"; A.filtro = "Todas"; A.soloBajos = false;
+    A.vista = "panel"; A.filtro = "Todas"; A.soloBajos = false;
     pintar();
     return avisar(esAdmin() ? "Vista de administrador" : "Vista de vendedor (prueba)");
   }
