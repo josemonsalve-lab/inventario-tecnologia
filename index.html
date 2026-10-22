@@ -1201,13 +1201,14 @@ function calcularCot(c){
     const sub = neto * l.cant;
     r.equipos += sub;
     r.unidades += l.cant;
-    const t = c.enviar === false ? null : tarifaEnvio(l.codigo, c.destino);
+    const dest = l.destino || c.destino;            // cada línea puede ir a otra ciudad
+    const t = c.enviar === false ? null : tarifaEnvio(l.codigo, dest);
     let env = 0;
     if(t){
       env = (t[1] / c.uf) * (c.seguro ? F_SEGURO : 1) * l.cant;
       r.envio += env;
-    } else if(c.enviar !== false) r.sinTarifa.push(l.codigo);
-    r.lineas.push({ l: l, m: m, neto: neto, sub: sub, env: env, sinTarifa: !t });
+    } else if(c.enviar !== false) r.sinTarifa.push(l.codigo + " a " + dest);
+    r.lineas.push({ l: l, m: m, neto: neto, sub: sub, env: env, sinTarifa: !t, destino: dest });
   }
   if(c.enviar === false) r.envio = 0;
   else if(c.envioManual !== null && c.envioManual !== "") r.envio = Number(c.envioManual);
@@ -1341,6 +1342,7 @@ async function cotizacionPDF(){
     doc.text(uf2(x.sub), cols[4], y, { align: "right" });
     doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...GRIS);
     doc.text(x.m.codigo + (x.l.desc ? "  ·  descuento " + x.l.desc + "%" : "") +
+      (x.l.destino ? "  ·  envío a " + x.l.destino : "") +
       (c.modalidad === "Arriendo" ? "  ·  valor mensual" : ""), cols[1], y + 4.5);
     doc.setTextColor(...TEXTO);
     y += 12;
@@ -1468,9 +1470,12 @@ function vistaCotizador(){
     (r.lineas.length ? '<div class="lista">' + r.lineas.map((x,i) => {
       const disp = disponiblesDe(x.l.codigo);
       return '<div class="fila"><div class="t" data-linea="' + i + '" style="cursor:pointer"><b>' + esc(x.m.nombre || x.m.modelo || x.m.codigo) + '</b>' +
-        '<span>' + x.l.cant + " × " + uf2(x.neto) + " UF" + (x.l.desc ? " (−" + x.l.desc + "%)" : "") + '</span>' +
+        '<span>' + x.l.cant + " × " + uf2(x.neto) + " UF" + (x.l.desc ? " (−" + x.l.desc + "%)" : "") +
+          (x.l.destino ? ' · <b style="color:var(--azul)">envío a ' + esc(x.l.destino) + '</b>' : "") + '</span>' +
+        (c.enviar && x.env ? '<span>Envío: ' + uf2(x.env) + ' UF</span>' : "") +
         (disp < x.l.cant ? '<span style="color:var(--rojo)">Solo ' + disp + ' disponibles hoy</span>' : "") +
-        (x.sinTarifa && c.enviar ? '<span style="color:#a76a00">Sin tarifa de envío a ' + esc(c.destino) + '</span>' : "") + '</div>' +
+        (x.sinTarifa && c.enviar ? '<span style="color:#a76a00">Sin tarifa de envío a ' +
+          esc(x.destino) + '</span>' : "") + '</div>' +
         '<div style="text-align:right"><b style="color:var(--azul)">' + uf2(x.sub) + ' UF</b></div>' +
         '<button data-quitar-linea="' + i + '" style="color:var(--n500);font-weight:700;padding:0 4px">×</button></div>';
     }).join("") + '</div>' : '<p class="mini" style="margin:0">Elige los equipos que vas a cotizar, o deja esto vacío y cotiza solo visitas técnicas.</p>') +
@@ -1547,6 +1552,12 @@ function modalLinea(idx){
         '</option>').join("") + '</select></label>' +
     '<div class="f2"><label class="f"><span>Cantidad</span><input class="inp" id="l-cant" type="number" min="1" value="' + (l ? l.cant : 1) + '"></label>' +
     '<label class="f"><span>Descuento %</span><input class="inp" id="l-desc" type="number" min="0" max="100" value="' + (l ? (l.desc || 0) : 0) + '"></label></div>' +
+    '<label class="f"><span>Destino de este equipo</span><select class="inp" id="l-destino">' +
+      '<option value="">El de la cotización · ' + esc(c.destino) + '</option>' +
+      TARIFAS.destinos.map(x => '<option value="' + esc(x) + '"' +
+        (l && l.destino === x ? " selected" : "") + '>' + esc(x) + '</option>').join("") + '</select></label>' +
+    '<p class="mini" style="margin:0">Sirve cuando los equipos de una misma cotización van a ciudades ' +
+    'distintas: el envío de esta línea se cobra según ese destino.</p>' +
     '<p class="mini" style="margin:0">Precio ' + (c.modalidad === "Arriendo" ? "de arriendo mensual" : "de venta") + ' según el catálogo.</p>' +
     '<button class="btn btn-celeste btn-w" data-accion="guardar-linea">' + (l ? "Guardar cambios" : "Agregar a la cotización") + '</button>' +
     (l ? '<button class="btn btn-rojo btn-w" data-accion="quitar-linea-modal">Quitar de la cotización</button>' : ""),
@@ -1561,6 +1572,7 @@ function textoCot(){
   L.push("Destino: " + c.destino + " · " + c.modalidad);
   L.push("");
   r.lineas.forEach(x => L.push("- " + x.l.cant + " × " + (x.m.nombre || x.m.modelo || x.m.codigo) +
+    (x.l.destino ? " a " + x.l.destino : "") +
     ": " + uf2(x.sub) + " UF (" + clp(x.sub * c.uf) + ")"));
   if(r.nVisitas) L.push("- " + r.nVisitas + " × visita técnica de 2 horas en " + c.destino +
     ": " + uf2(r.nVisitas * valorVisita(c.destino)) + " UF");
@@ -2208,6 +2220,17 @@ async function reportePDFInterno(){
 }
 
 /* ------------------------------------------------------------- panel */
+/* Porcentajes que no mienten: solo llega a 100 si no falta nada, y algo
+   distinto de cero nunca se muestra como 0%. */
+function porcentaje(parte, total){
+  if(!total || parte <= 0) return 0;
+  if(parte >= total) return 100;
+  const p = parte / total * 100;
+  if(p > 99) return 99;
+  if(p < 1) return "<1";
+  return Math.round(p);
+}
+
 const COLORES_PANEL = ["#00baff", "#beda69", "#0a5c85", "#f0a830", "#c0392b", "#8e7cc3", "#9aa7b1"];
 
 /* Dona en SVG: cada porción es un trazo sobre la misma circunferencia. */
@@ -2244,7 +2267,7 @@ function dona(items, centro, subcentro){
       const dentro = '<i style="background:' + x.color + '"></i>' +
         '<span>' + esc(x.nombre) + '</span>' +
         '<b>' + nf.format(x.valor) + '</b>' +
-        '<em>' + Math.round(x.valor / total * 100) + '%</em>';
+        '<em>' + porcentaje(x.valor, total) + '%</em>';
       return x.ir
         ? '<button class="leyenda-ir" ' + atributosIr(x.ir) + '>' + dentro + '</button>'
         : '<div>' + dentro + '</div>';
@@ -2294,7 +2317,7 @@ function panelVendedor(){
     tarjetaPanel("Modelos con stock",
       dona([{ nombre: "Con stock", valor: conStock, color: "#beda69", ir: { vista: "dispo" } },
             { nombre: "Agotados", valor: sinStock, color: "#c0392b", ir: { vista: "stock" } }],
-           (ms.length ? Math.round(conStock / ms.length * 100) : 0) + "%", "del catálogo"),
+           porcentaje(conStock, ms.length) + "%", "del catálogo"),
       { vista: "dispo" }) +
     tarjetaPanel("Modelos con más disponibles", dona(top, nf.format(disp), "equipos"),
       { vista: "dispo" }) +
@@ -2505,7 +2528,7 @@ function vistaPanel(){
   return cabecera + '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
       '<tr><td>Equipos registrados</td><td>' + nf.format(us.length) + '</td></tr>' +
       '<tr><td>Disponibles</td><td>' + nf.format(disp) +
-        (us.length ? " · " + Math.round(disp / us.length * 100) + "%" : "") + '</td></tr>' +
+        (us.length ? " · " + porcentaje(disp, us.length) + "%" : "") + '</td></tr>' +
       '<tr><td>Modelos bajo mínimo</td><td' + (bajos ? ' style="color:var(--rojo)"' : "") + '>' +
         nf.format(bajos) + '</td></tr>' +
       '<tr><td>Valor del stock disponible</td><td>' + uf2(valorUF) + ' UF</td></tr>' +
@@ -2516,19 +2539,19 @@ function vistaPanel(){
     '</table></div>' +
 
     tarjetaPanel("Equipos por situación",
-      dona(porSit, (us.length ? Math.round(disp / us.length * 100) : 0) + "%", "disponibles"),
+      dona(porSit, porcentaje(disp, us.length) + "%", "disponibles"),
       { vista: "equipos" }) +
     tarjetaPanel("Dónde está el stock",
-      dona(top, (us.length && top.length ? Math.round(top[0].valor / us.length * 100) : 0) + "%",
+      dona(top, (top.length ? porcentaje(top[0].valor, us.length) : 0) + "%",
         top.length ? "en " + top[0].nombre : ""), { vista: "stock" }) +
     tarjetaPanel("Estado de las tareas",
-      dona(porEstadoT, (ts.length ? Math.round(hechas / ts.length * 100) : 0) + "%", "cerradas"),
+      dona(porEstadoT, porcentaje(hechas, ts.length) + "%", "cerradas"),
       { vista: "tareas", chip: "Todo" }) +
     tarjetaPanel("Pendientes por prioridad",
-      dona(porPrio, (pend ? Math.round(porPrio[0].valor / pend * 100) : 0) + "%", "de prioridad alta"),
+      dona(porPrio, porcentaje(porPrio[0].valor, pend) + "%", "de prioridad alta"),
       { vista: "tareas", chip: "Pendientes" }) +
     tarjetaPanel("Equipos comprados por proveedor",
-      dona(donaProv, (us.length ? Math.round(compradoProv / us.length * 100) : 0) + "%",
+      dona(donaProv, porcentaje(compradoProv, us.length) + "%",
         "con proveedor") +
       (porProv.length
         ? '<div class="lista" style="margin-top:10px">' + porProv.slice(0, 8).map(x =>
@@ -2544,7 +2567,7 @@ function vistaPanel(){
       { vista: "proveedores" }) +
 
     (mant.length ? tarjetaPanel("Taller",
-      dona(porTaller, Math.round(mant.filter(enTaller).length / mant.length * 100) + "%", "en taller ahora"),
+      dona(porTaller, porcentaje(mant.filter(enTaller).length, mant.length) + "%", "en taller ahora"),
       { vista: "taller" }) : "") +
     '<p class="mini" style="margin:0">Las cifras salen de todo el inventario y de todas las tareas. ' +
     'Para analizar un período o una persona, usa los otros reportes o las estadísticas de Tareas.</p>';
@@ -3132,7 +3155,7 @@ function vistaEstadisticas(ts){
   return '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
       '<tr><td>Tareas en el período</td><td>' + nf.format(ts.length) + '</td></tr>' +
       '<tr><td>Cerradas</td><td>' + nf.format(hechas) +
-        (ts.length ? " · " + Math.round(hechas / ts.length * 100) + "%" : "") + '</td></tr>' +
+        (ts.length ? " · " + porcentaje(hechas, ts.length) + "%" : "") + '</td></tr>' +
       '<tr><td>Pendientes</td><td>' + nf.format(ts.length - hechas) + '</td></tr>' +
       '<tr><td>Vencidas</td><td' + (vencidas ? ' style="color:var(--rojo)"' : "") + '>' + nf.format(vencidas) + '</td></tr>' +
       '<tr><td>Personas con tareas</td><td>' + nf.format(personas.length) + '</td></tr>' +
@@ -5378,7 +5401,8 @@ document.addEventListener("click", async ev => {
   }
   if(a === "agregar-linea"){ leerCot(); return modalLinea(); }
   if(a === "guardar-linea"){
-    const linea = { codigo: val("l-codigo"), cant: Math.max(1, Number(val("l-cant")) || 1), desc: Number(val("l-desc")) || 0 };
+    const linea = { codigo: val("l-codigo"), cant: Math.max(1, Number(val("l-cant")) || 1),
+      desc: Number(val("l-desc")) || 0, destino: val("l-destino") || "" };
     if(ctx.idx === null || ctx.idx === undefined) A.cot.lineas.push(linea);
     else A.cot.lineas[ctx.idx] = linea;
     await Store.set("cot", A.cot);
