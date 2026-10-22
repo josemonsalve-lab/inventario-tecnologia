@@ -363,7 +363,8 @@ const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() :
 
 /* nombres de columna que difieren entre la app y la base */
 const MAPA = {
-  modelos: { ventaUF: "venta_uf", arriendoUF: "arriendo_uf", proveedorId: "proveedor_id" },
+  modelos: { ventaUF: "venta_uf", arriendoUF: "arriendo_uf", proveedorId: "proveedor_id",
+    tarifaDe: "tarifa_de" },
   unidades: { proveedorId: "proveedor_id", facturaId: "factura_id" },   /* lote y creado viajan igual */
   facturas: { proveedorId: "proveedor_id" },
   mantenimientos: { unidadId: "unidad_id", fechaIngreso: "fecha_ingreso", fechaSalida: "fecha_salida" },
@@ -1175,7 +1176,16 @@ async function actualizarUF(forzar){
   }
   return A.uf;
 }
-const tarifaEnvio = (cod, destino) => (TARIFAS.envios[cod] || {})[destino] || null;
+/* Un modelo sin tarifa propia puede usar la de otro equivalente, por ejemplo
+   una caja metálica que viaja igual que el control que lleva adentro. */
+const tarifaEnvio = (cod, destino) => {
+  const propia = (TARIFAS.envios[cod] || {})[destino];
+  if(propia) return propia;
+  const m = modelo(cod);
+  if(m && m.tarifaDe) return (TARIFAS.envios[m.tarifaDe] || {})[destino] || null;
+  return null;
+};
+const codigosConTarifa = () => Object.keys(TARIFAS.envios).sort();
 const tarifaInstal = destino => TARIFAS.instal[destino] || null;
 const uf2 = n => (Math.round(n * 10000) / 10000).toFixed(2);
 /* La visita técnica de 2 horas vale lo mismo que una instalación en todas las
@@ -1185,7 +1195,7 @@ const valorVisita = destino => { const i = tarifaInstal(destino); return i ? i.i
 const valorHora = destino => { const i = tarifaInstal(destino); return i && i.hora ? i.hora * MARGEN_SERVICIO : 0; };
 
 function cotVacia(){
-  return { id: "", cliente: "", destino: "RM", modalidad: "Venta", fecha: hoy(), uf: A.uf || UF_DEF,
+  return { id: "", cliente: "", destino: "", modalidad: "Venta", fecha: hoy(), uf: A.uf || UF_DEF,
     seguro: true, iva: true, enviar: true, instalar: true, instalaciones: null,
     visitas: 0, horas: 0, lineas: [], envioManual: null };
 }
@@ -1202,7 +1212,8 @@ function calcularCot(c){
     r.equipos += sub;
     r.unidades += l.cant;
     const dest = l.destino || c.destino;            // cada línea puede ir a otra ciudad
-    const t = c.enviar === false ? null : tarifaEnvio(l.codigo, dest);
+    const manual = l.envioManual != null && l.envioManual !== "";
+    const t = c.enviar === false ? null : (manual ? [0, Number(l.envioManual)] : tarifaEnvio(l.codigo, dest));
     let env = 0;
     if(t){
       env = (t[1] / c.uf) * (c.seguro ? F_SEGURO : 1) * l.cant;
@@ -1212,13 +1223,31 @@ function calcularCot(c){
   }
   if(c.enviar === false) r.envio = 0;
   else if(c.envioManual !== null && c.envioManual !== "") r.envio = Number(c.envioManual);
-  const ins = tarifaInstal(c.destino);
+  /* La instalación se cobra con la tarifa de la ciudad de cada equipo. Si se
+     indica a mano cuántas instalaciones cobrar, se usa la ciudad principal. */
+  r.destinos = [...new Set(r.lineas.map(x => x.destino))];
+  r.destinoPrincipal = r.destinos.length === 1 ? r.destinos[0]
+    : (r.destinos.sort((a, b) =>
+        r.lineas.filter(x => x.destino === b).reduce((s, x) => s + x.l.cant, 0) -
+        r.lineas.filter(x => x.destino === a).reduce((s, x) => s + x.l.cant, 0))[0] || c.destino);
   r.nInst = c.instalar === false ? 0
     : (c.instalaciones === null || c.instalaciones === "" ? r.unidades : Math.max(0, Number(c.instalaciones)));
-  r.instalacion = ins ? ins.inst * r.nInst : 0;
+  if(c.instalar === false) r.instalacion = 0;
+  else if(c.instalaciones === null || c.instalaciones === ""){
+    r.instalacion = r.lineas.reduce((a, x) => {
+      const i = tarifaInstal(x.destino);
+      return a + (i ? i.inst * x.l.cant : 0);
+    }, 0);
+  } else {
+    const i = tarifaInstal(r.destinoPrincipal);
+    r.instalacion = i ? i.inst * r.nInst : 0;
+  }
   r.nVisitas = Math.max(0, Number(c.visitas) || 0);
   r.nHoras = Math.max(0, Number(c.horas) || 0);
-  r.visitas = r.nVisitas * valorVisita(c.destino) + r.nHoras * valorHora(c.destino);
+  /* La ciudad de las visitas sigue a la de los equipos salvo que se elija otra. */
+  const dv = (c.destinoManual && c.destino) ? c.destino : (r.destinoPrincipal || c.destino || "RM");
+  r.destinoVisitas = dv;
+  r.visitas = r.nVisitas * valorVisita(dv) + r.nHoras * valorHora(dv);
   r.soloVisitas = !r.lineas.length && (r.nVisitas > 0 || r.nHoras > 0);
   r.hayAlgo = r.lineas.length > 0 || r.nVisitas > 0 || r.nHoras > 0;
   r.unico = r.envio + r.instalacion + r.visitas + (c.modalidad === "Arriendo" ? 0 : r.equipos);
@@ -1288,7 +1317,7 @@ async function cotizacionPDF(){
   };
   const izq = y;
   dato("Cliente", c.cliente);
-  dato("Destino", c.destino);
+  dato("Destino", (r.destinos && r.destinos.length ? r.destinos.join(", ") : r.destinoVisitas || c.destino));
   y = izq;
   const dato2 = (et, va) => {
     doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...GRIS);
@@ -1350,10 +1379,10 @@ async function cotizacionPDF(){
     doc.setDrawColor(...LINEA); doc.line(M - 3, y - 5.5, W - M + 3, y - 5.5);
   }
 
-  if(r.nVisitas) filaDetalle(r.nVisitas, "Visita técnica en " + c.destino,
-    r.nVisitas * valorVisita(c.destino), valorVisita(c.destino), "2 horas por visita");
+  if(r.nVisitas) filaDetalle(r.nVisitas, "Visita técnica en " + r.destinoVisitas,
+    r.nVisitas * valorVisita(r.destinoVisitas), valorVisita(r.destinoVisitas), "2 horas por visita");
   if(r.nHoras) filaDetalle(r.nHoras, "Horas adicionales de visita técnica",
-    r.nHoras * valorHora(c.destino), valorHora(c.destino), "");
+    r.nHoras * valorHora(r.destinoVisitas), valorHora(r.destinoVisitas), "");
 
   /* totales */
   y += 4;
@@ -1428,14 +1457,14 @@ function vistaCotizador(){
   const c = A.cot;
   if(!c.id) c.fecha = hoy();          // borrador: siempre el día en curso
   const r = calcularCot(c);
-  const ins = tarifaInstal(c.destino);
+  const ins = tarifaInstal(r.destinoPrincipal);
   const dinero = u => uf2(u) + " UF · " + clp(u * c.uf);
 
   return '<div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">' +
 
     '<div class="fila" style="display:block"><div class="f2">' +
     '<label class="f"><span>Cliente</span><input class="inp" id="c-cliente" value="' + esc(c.cliente) + '" placeholder="Nombre de la empresa"></label>' +
-    '<label class="f"><span>Destino</span><select class="inp" id="c-destino">' + opciones(TARIFAS.destinos, c.destino) + '</select></label></div>' +
+    '</div>' +
     '<label class="f" style="margin-top:10px"><span>Modalidad</span><select class="inp" id="c-modalidad">' +
       opciones(["Venta","Arriendo"], c.modalidad) + '</select></label>' +
     '<div class="f2" style="margin-top:10px">' +
@@ -1485,8 +1514,11 @@ function vistaCotizador(){
     '<div class="fila" style="display:block"><div class="f2">' +
     '<label class="f"><span>Visitas de 2 horas</span><input class="inp" id="c-visitas" type="number" min="0" value="' + esc(c.visitas || 0) + '"></label>' +
     '<label class="f"><span>Horas adicionales</span><input class="inp" id="c-horas" type="number" min="0" step="0.5" value="' + esc(c.horas || 0) + '"></label></div>' +
-    '<p class="mini" style="margin:8px 0 0">En ' + esc(c.destino) + ': ' + uf2(valorVisita(c.destino)) + ' UF la visita, ' +
-      uf2(valorHora(c.destino)) + ' UF la hora adicional.</p></div>' +
+    '<label class="f" style="margin-top:10px"><span>Ciudad de las visitas</span>' +
+      '<select class="inp" id="c-destino">' + opciones(TARIFAS.destinos, r.destinoVisitas) + '</select></label>' +
+    '<p class="mini" style="margin:8px 0 0">En ' + esc(r.destinoVisitas) + ': ' +
+      uf2(valorVisita(r.destinoVisitas)) + ' UF la visita, ' +
+      uf2(valorHora(r.destinoVisitas)) + ' UF la hora adicional.</p></div>' +
 
     (r.hayAlgo ? '<div class="fila" style="display:block">' +
       '<table class="specs">' +
@@ -1494,7 +1526,7 @@ function vistaCotizador(){
       (r.nVisitas || r.nHoras ? '<tr><td>Visitas técnicas' +
         (r.nVisitas ? " · " + r.nVisitas + (r.nVisitas === 1 ? " visita" : " visitas") : "") +
         (r.nHoras ? " · " + r.nHoras + " h adicionales" : "") + '</td><td>' + dinero(r.visitas) + '</td></tr>' : "") +
-      (r.lineas.length ? '<tr><td>' + (c.enviar ? "Envío a " + esc(c.destino) + (c.seguro ? " (con seguro)" : "") : "Envío no incluido") +
+      (r.lineas.length ? '<tr><td>' + (c.enviar ? "Envío a " + esc(r.destinos.join(", ")) + (c.seguro ? " (con seguro)" : "") : "Envío no incluido") +
         '</td><td>' + dinero(r.envio) + '</td></tr>' : "") +
       (r.lineas.length ? '<tr><td>Instalación' + (r.nInst ? " · " + r.nInst + (r.nInst === 1 ? " instalación" : " instalaciones") : " no incluida") +
         (r.nInst && !ins ? " (sin tarifa)" : "") + '</td><td>' + dinero(r.instalacion) + '</td></tr>' : "") +
@@ -1540,6 +1572,12 @@ function leerCot(){
   if(v("c-horas") !== null) c.horas = Math.max(0, Number(v("c-horas")) || 0);
 }
 
+/* Propone la ciudad usada en la línea anterior, que es lo habitual. */
+function ultimoDestino(){
+  const ls = (A.cot.lineas || []);
+  return (ls.length ? ls[ls.length - 1].destino : "") || A.cot.destino || "RM";
+}
+
 function modalLinea(idx){
   const c = A.cot;
   const l = (idx === null || idx === undefined) ? null : c.lineas[idx];
@@ -1552,12 +1590,15 @@ function modalLinea(idx){
         '</option>').join("") + '</select></label>' +
     '<div class="f2"><label class="f"><span>Cantidad</span><input class="inp" id="l-cant" type="number" min="1" value="' + (l ? l.cant : 1) + '"></label>' +
     '<label class="f"><span>Descuento %</span><input class="inp" id="l-desc" type="number" min="0" max="100" value="' + (l ? (l.desc || 0) : 0) + '"></label></div>' +
+    '<label class="f"><span>Envío de esta línea (CLP, opcional)</span>' +
+      '<input class="inp" id="l-envio" type="number" min="0" value="' +
+      esc(l && l.envioManual != null ? l.envioManual : "") + '" placeholder="Dejar vacío usa la tarifa"></label>' +
     '<label class="f"><span>Destino de este equipo</span><select class="inp" id="l-destino">' +
-      '<option value="">El de la cotización · ' + esc(c.destino) + '</option>' +
       TARIFAS.destinos.map(x => '<option value="' + esc(x) + '"' +
-        (l && l.destino === x ? " selected" : "") + '>' + esc(x) + '</option>').join("") + '</select></label>' +
-    '<p class="mini" style="margin:0">Sirve cuando los equipos de una misma cotización van a ciudades ' +
-    'distintas: el envío de esta línea se cobra según ese destino.</p>' +
+        ((l ? l.destino : ultimoDestino()) === x ? " selected" : "") + '>' + esc(x) + '</option>').join("") +
+      '</select></label>' +
+    '<p class="mini" style="margin:0">El envío y la instalación de esta línea se cobran según esta ciudad. ' +
+    'Cada equipo de la cotización puede ir a una distinta.</p>' +
     '<p class="mini" style="margin:0">Precio ' + (c.modalidad === "Arriendo" ? "de arriendo mensual" : "de venta") + ' según el catálogo.</p>' +
     '<button class="btn btn-celeste btn-w" data-accion="guardar-linea">' + (l ? "Guardar cambios" : "Agregar a la cotización") + '</button>' +
     (l ? '<button class="btn btn-rojo btn-w" data-accion="quitar-linea-modal">Quitar de la cotización</button>' : ""),
@@ -1569,14 +1610,14 @@ function textoCot(){
   const L = [];
   L.push("COTIZACIÓN N° " + folio(c) + (c.cliente ? " · " + c.cliente : ""));
   L.push("Fecha: " + fechaLarga(c.fecha || hoy()));
-  L.push("Destino: " + c.destino + " · " + c.modalidad);
+  L.push("Destino: " + (r.destinos.length ? r.destinos.join(", ") : r.destinoVisitas) + " · " + c.modalidad);
   L.push("");
   r.lineas.forEach(x => L.push("- " + x.l.cant + " × " + (x.m.nombre || x.m.modelo || x.m.codigo) +
     (x.l.destino ? " a " + x.l.destino : "") +
     ": " + uf2(x.sub) + " UF (" + clp(x.sub * c.uf) + ")"));
-  if(r.nVisitas) L.push("- " + r.nVisitas + " × visita técnica de 2 horas en " + c.destino +
-    ": " + uf2(r.nVisitas * valorVisita(c.destino)) + " UF");
-  if(r.nHoras) L.push("- " + r.nHoras + " × hora adicional: " + uf2(r.nHoras * valorHora(c.destino)) + " UF");
+  if(r.nVisitas) L.push("- " + r.nVisitas + " × visita técnica de 2 horas en " + r.destinoVisitas +
+    ": " + uf2(r.nVisitas * valorVisita(r.destinoVisitas)) + " UF");
+  if(r.nHoras) L.push("- " + r.nHoras + " × hora adicional: " + uf2(r.nHoras * valorHora(r.destinoVisitas)) + " UF");
   L.push("");
   if(r.lineas.length){
     L.push((c.modalidad === "Arriendo" ? "Arriendo mensual" : "Equipos") + ": " + uf2(r.equipos) + " UF");
@@ -3644,6 +3685,14 @@ function pintarFormModelo(){
     '<label class="f"><span>Visible para vendedores</span><select class="inp" id="activo">' +
       opciones(["Sí","No"], (m && m.activo === false) ? "No" : "Sí") + '</select></label></div>' +
     '<label class="f"><span>Proveedor habitual</span><select class="inp" id="proveedorId">' + optProv(g("proveedorId")) + '</select></label>' +
+    (TARIFAS.envios[m ? m.codigo : ""] ? "" :
+      '<label class="f"><span>Tarifa de envío</span><select class="inp" id="tarifaDe">' +
+      '<option value="">Sin tarifa propia</option>' +
+      codigosConTarifa().map(cod => '<option value="' + esc(cod) + '"' +
+        (m && m.tarifaDe === cod ? " selected" : "") + '>Usar la de ' + esc(cod) + '</option>').join("") +
+      '</select></label>' +
+      '<p class="mini" style="margin:0">Este modelo no tiene tarifa de envío propia en la planilla. ' +
+      'Puedes indicarle que use la de otro equipo parecido y el cotizador la aplicará.</p>') +
 
     '<div class="sec">Ficha técnica</div>' +
     '<div class="f2"><label class="f"><span>Peso (kg)</span><input class="inp" id="peso" type="number" step="0.1" value="' + esc(gf("peso")) + '"></label>' +
@@ -3686,6 +3735,7 @@ async function guardarModelo(){
     arriendoUF: val("arriendoUF") ? Number(val("arriendoUF")) : null,
     minimo: Number(val("minimo")) || 0,
     activo: val("activo") !== "No",
+    tarifaDe: val("tarifaDe") || "",
     proveedorId: val("proveedorId") || "",
     ficha: ficha, func: func
   };
@@ -5402,7 +5452,8 @@ document.addEventListener("click", async ev => {
   if(a === "agregar-linea"){ leerCot(); return modalLinea(); }
   if(a === "guardar-linea"){
     const linea = { codigo: val("l-codigo"), cant: Math.max(1, Number(val("l-cant")) || 1),
-      desc: Number(val("l-desc")) || 0, destino: val("l-destino") || "" };
+      desc: Number(val("l-desc")) || 0, destino: val("l-destino") || ultimoDestino(),
+      envioManual: val("l-envio") === "" ? null : Number(val("l-envio")) };
     if(ctx.idx === null || ctx.idx === undefined) A.cot.lineas.push(linea);
     else A.cot.lineas[ctx.idx] = linea;
     await Store.set("cot", A.cot);
@@ -5626,6 +5677,7 @@ document.addEventListener("change", async ev => {
     return pintar();
   }
   if(["c-cliente","c-destino","c-modalidad","c-envio","c-inst","c-visitas","c-horas"].indexOf(ev.target.id) >= 0){
+    if(ev.target.id === "c-destino") A.cot.destinoManual = true;
     leerCot();
     await Store.set("cot", A.cot);
     return pintar();
