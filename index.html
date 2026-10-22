@@ -1098,6 +1098,101 @@ function soloSuper(){
   return true;
 }
 
+/* ------------------------------------------- tarifas de envío faltantes */
+const esAccesorio = m => /accesorio|bater|boton|botón|tarjeta|soporte|fuente|ups|retenedor|cable|enrolador/i
+  .test((m.categoria || "") + " " + (m.nombre || "") + " " + (m.modelo || ""));
+
+function sinTarifaPropia(){
+  return A.modelos.filter(m => !TARIFAS.envios[m.codigo]);
+}
+
+/* Propone la tarifa de otro código parecido: CJ-MB360 se parece a ZK-MB360. */
+/* Para comparar códigos se quita el prefijo de familia y todo lo que no sea
+   letra o número: CJ-M560VL y ZK-MB560VL quedan M560VL y MB560VL. */
+function raizCodigo(codigo){
+  return sinTildes(codigo).toUpperCase()
+    .replace(/^(CJ|ZK|HU|AC|TR)[\s\-_]*/, "")
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+/* Largo del trozo más largo que comparten dos textos. */
+function parecido(a, b){
+  if(!a || !b) return 0;
+  let mejor = 0;
+  for(let i = 0; i < a.length; i++){
+    for(let j = i + mejor + 1; j <= a.length; j++){
+      if(b.indexOf(a.slice(i, j)) >= 0) mejor = j - i; else break;
+    }
+  }
+  return mejor / Math.min(a.length, b.length);
+}
+
+function tarifaSugerida(codigo){
+  if(TARIFA_EQUIV[codigo]) return TARIFA_EQUIV[codigo];
+  const mia = raizCodigo(codigo);
+  if(mia.length < 2) return "";
+  let mejor = "", puntos = 0;
+  for(const cod of Object.keys(TARIFAS.envios)){
+    const p = parecido(mia, raizCodigo(cod));
+    if(p > puntos){ puntos = p; mejor = cod; }
+  }
+  return puntos >= 0.6 ? mejor : "";          // bajo eso no se parece lo suficiente
+}
+
+async function modalTarifas(){
+  const faltan = sinTarifaPropia();
+  ctx = { tipo: "tarifas", elegidas: {} };
+  for(const m of faltan){
+    /* Lo que no se parece a ningún equipo suele ser un accesorio que viaja
+       dentro de la misma caja: se propone sin cobro. */
+    const s = tarifaSugerida(m.codigo);
+    ctx.elegidas[m.codigo] = m.tarifaDe || s || (esAccesorio(m) ? SIN_COSTO : "");
+  }
+  pintarTarifas();
+}
+
+function pintarTarifas(){
+  const faltan = sinTarifaPropia();
+  const conValor = faltan.filter(m => ctx.elegidas[m.codigo]).length;
+  abrirModal(
+    '<p class="mini" style="margin:0">Estos ' + faltan.length + ' modelos no tienen tarifa propia en la ' +
+    'planilla de envíos. Indica de cuál la toman y el cotizador dejará de avisar. Los accesorios vienen ' +
+    'propuestos como <b>No se cobra</b>, porque suelen viajar dentro de la caja del equipo; el resto, ' +
+    'por parecido de código. Revisa antes de guardar.</p>' +
+    '<div class="lista">' + faltan.map(m =>
+      '<div class="fila"><div class="t"><b>' + esc(m.nombre || m.modelo || m.codigo) + '</b>' +
+      '<span>' + esc(m.codigo) + (m.categoria ? " · " + esc(m.categoria) : "") + '</span></div>' +
+      '<select class="inp" style="width:auto;max-width:150px;padding:6px 8px;font-size:12px" ' +
+      'data-tarifade="' + esc(m.codigo) + '">' +
+        '<option value="">Sin definir</option>' +
+        '<option value="' + SIN_COSTO + '"' +
+          (ctx.elegidas[m.codigo] === SIN_COSTO ? " selected" : "") + '>No se cobra</option>' +
+        '<option value="' + ENVIO_MANUAL + '"' +
+          (ctx.elegidas[m.codigo] === ENVIO_MANUAL ? " selected" : "") + '>A cotizar</option>' +
+        codigosConTarifa().map(cod => '<option value="' + esc(cod) + '"' +
+          (ctx.elegidas[m.codigo] === cod ? " selected" : "") + '>' + esc(cod) + '</option>').join("") +
+      '</select></div>').join("") + '</div>' +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-tarifas">Guardar ' + conValor +
+      (conValor === 1 ? " asignación" : " asignaciones") + '</button>',
+    "Tarifas de envío");
+}
+
+async function guardarTarifas(){
+  const cambiados = [];
+  for(const m of sinTarifaPropia()){
+    const nueva = ctx.elegidas[m.codigo] || "";
+    if((m.tarifaDe || "") === nueva) continue;
+    m.tarifaDe = nueva;
+    cambiados.push(m);
+  }
+  if(!cambiados.length){ cerrarModal(); return avisar("No hubo cambios"); }
+  await persistirLote("modelos", cambiados);
+  if(!REMOTO) await guardar("modelos");
+  registrar("Tarifas de envío asignadas a " + cambiados.length + " modelos", "");
+  cerrarModal(); pintar();
+  avisar(cambiados.length + " modelos con tarifa de envío");
+}
+
 function vistaAjustes(){
   const t = totales();
   return '<div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">' +
@@ -1107,6 +1202,11 @@ function vistaAjustes(){
     '<button class="btn btn-linea btn-w" data-accion="pedir-catalogo">Cargar catálogo Rex+ (' + CATALOGO_REX.length + ' modelos)</button>' +
     '<button class="btn btn-linea btn-w" data-accion="importar">Importar equipos desde Excel</button>' +
     '<button class="btn btn-linea btn-w" data-accion="exportar">Exportar todo a CSV</button>' +
+    (sinTarifaPropia().filter(m => !m.tarifaDe).length
+      ? '<button class="btn btn-linea btn-w" data-accion="tarifas">Tarifas de envío faltantes (' +
+        sinTarifaPropia().filter(m => !m.tarifaDe).length + ')</button>'
+      : (sinTarifaPropia().length ? '<button class="btn btn-suave btn-w" data-accion="tarifas">' +
+        'Revisar tarifas de envío heredadas</button>' : "")) +
     (esSuper()
       ? '<div class="sec">Acciones del super administrador</div>' +
         '<button class="btn btn-rojo btn-w" data-accion="vaciar-equipos"' + (A.unidades.length ? "" : " disabled") + '>' +
@@ -1178,10 +1278,22 @@ async function actualizarUF(forzar){
 }
 /* Un modelo sin tarifa propia puede usar la de otro equivalente, por ejemplo
    una caja metálica que viaja igual que el control que lleva adentro. */
+const SIN_COSTO = "__gratis";                 /* viaja con otro equipo, no se cobra */
+const ENVIO_MANUAL = "__manual";              /* voluminoso: el flete se cotiza caso a caso */
+
+/* Equivalencias que no salen del parecido de código, puestas a mano. */
+const TARIFA_EQUIV = {
+  "ZK-KF160": "ZK-MB360", "ZK-SF2A": "ZK-SF-V4L", "ZK-FD-19": "ZK-IN05-A",
+  "ZK-UFACE602": "ZK-IN05-A", "ZK-S922": "ZK-MB360",
+  "SILK-TS-2022PRO": ENVIO_MANUAL, "TR-2-BRAZOSTS2222": ENVIO_MANUAL,
+  "ZK-BAR-CMP200": ENVIO_MANUAL
+};
 const tarifaEnvio = (cod, destino) => {
   const propia = (TARIFAS.envios[cod] || {})[destino];
   if(propia) return propia;
   const m = modelo(cod);
+  if(m && m.tarifaDe === SIN_COSTO) return [0, 0];
+  if(m && m.tarifaDe === ENVIO_MANUAL) return null;      /* se espera el monto en la línea */
   if(m && m.tarifaDe) return (TARIFAS.envios[m.tarifaDe] || {})[destino] || null;
   return null;
 };
@@ -1503,8 +1615,10 @@ function vistaCotizador(){
           (x.l.destino ? ' · <b style="color:var(--azul)">envío a ' + esc(x.l.destino) + '</b>' : "") + '</span>' +
         (c.enviar && x.env ? '<span>Envío: ' + uf2(x.env) + ' UF</span>' : "") +
         (disp < x.l.cant ? '<span style="color:var(--rojo)">Solo ' + disp + ' disponibles hoy</span>' : "") +
-        (x.sinTarifa && c.enviar ? '<span style="color:#a76a00">Sin tarifa de envío a ' +
-          esc(x.destino) + '</span>' : "") + '</div>' +
+        (x.sinTarifa && c.enviar ? '<span style="color:#a76a00">' +
+          ((modelo(x.l.codigo) || {}).tarifaDe === ENVIO_MANUAL
+            ? "Equipo voluminoso: escribe el envío en esta línea"
+            : "Sin tarifa de envío a " + esc(x.destino)) + '</span>' : "") + '</div>' +
         '<div style="text-align:right"><b style="color:var(--azul)">' + uf2(x.sub) + ' UF</b></div>' +
         '<button data-quitar-linea="' + i + '" style="color:var(--n500);font-weight:700;padding:0 4px">×</button></div>';
     }).join("") + '</div>' : '<p class="mini" style="margin:0">Elige los equipos que vas a cotizar, o deja esto vacío y cotiza solo visitas técnicas.</p>') +
@@ -3687,7 +3801,11 @@ function pintarFormModelo(){
     '<label class="f"><span>Proveedor habitual</span><select class="inp" id="proveedorId">' + optProv(g("proveedorId")) + '</select></label>' +
     (TARIFAS.envios[m ? m.codigo : ""] ? "" :
       '<label class="f"><span>Tarifa de envío</span><select class="inp" id="tarifaDe">' +
-      '<option value="">Sin tarifa propia</option>' +
+      '<option value="">Sin definir, el cotizador avisará</option>' +
+      '<option value="' + SIN_COSTO + '"' + (m && m.tarifaDe === SIN_COSTO ? " selected" : "") +
+        '>No se cobra envío</option>' +
+      '<option value="' + ENVIO_MANUAL + '"' + (m && m.tarifaDe === ENVIO_MANUAL ? " selected" : "") +
+        '>Voluminoso: se cotiza en cada línea</option>' +
       codigosConTarifa().map(cod => '<option value="' + esc(cod) + '"' +
         (m && m.tarifaDe === cod ? " selected" : "") + '>Usar la de ' + esc(cod) + '</option>').join("") +
       '</select></label>' +
@@ -5531,6 +5649,8 @@ document.addEventListener("click", async ev => {
     if(!REMOTO) await guardarTodo();
     cerrarModal(); pintar(); return avisar("Proveedor eliminado");
   }
+  if(a === "tarifas") return modalTarifas();
+  if(a === "guardar-tarifas") return guardarTarifas();
   if(a === "pedir-catalogo"){
     const faltan = CATALOGO_REX.filter(c => !A.modelos.some(m => m.codigo === c.codigo)).length;
     return modalConfirmar("Cargar el catálogo Rex+",
@@ -5656,6 +5776,10 @@ document.addEventListener("change", async ev => {
     try{ ctx.datos = await leerExcelEquipos(f); }
     catch(e){ ctx.error = e.message || "No se pudo leer el archivo"; }
     return pintarImportar();
+  }
+  if(ev.target.dataset && ev.target.dataset.tarifade){
+    ctx.elegidas[ev.target.dataset.tarifade] = ev.target.value;
+    return pintarTarifas();
   }
   if(ev.target.id === "eq-modelo"){ A.filtroModelo = ev.target.value; return pintar(); }
   if(ev.target.id === "eq-tipo"){ A.filtroTipo = ev.target.value; return pintar(); }
