@@ -1318,7 +1318,9 @@ function calcularCot(c){
     const m = modelo(l.codigo);
     if(!m) continue;
     if(!esAdmin() && !activo(m)) continue;          // un modelo desactivado no se cotiza
-    const base = c.modalidad === "Arriendo" ? (m.arriendoUF || 0) : (m.ventaUF || 0);
+    const base = l.precioManual != null && l.precioManual !== ""
+      ? Number(l.precioManual)
+      : (c.modalidad === "Arriendo" ? (m.arriendoUF || 0) : (m.ventaUF || 0));
     const neto = base * (1 - (Number(l.desc) || 0) / 100);
     const sub = neto * l.cant;
     r.equipos += sub;
@@ -1614,6 +1616,7 @@ function vistaCotizador(){
         '<span>' + x.l.cant + " × " + uf2(x.neto) + " UF" + (x.l.desc ? " (−" + x.l.desc + "%)" : "") +
           (x.l.destino ? ' · <b style="color:var(--azul)">envío a ' + esc(x.l.destino) + '</b>' : "") + '</span>' +
         (c.enviar && x.env ? '<span>Envío: ' + uf2(x.env) + ' UF</span>' : "") +
+        (!x.neto ? '<span style="color:var(--rojo)">Sin precio: escríbelo en la línea</span>' : "") +
         (disp < x.l.cant ? '<span style="color:var(--rojo)">Solo ' + disp + ' disponibles hoy</span>' : "") +
         (x.sinTarifa && c.enviar ? '<span style="color:#a76a00">' +
           ((modelo(x.l.codigo) || {}).tarifaDe === ENVIO_MANUAL
@@ -1698,12 +1701,23 @@ function modalLinea(idx){
   ctx = { tipo: "linea", idx: (l ? idx : null) };
   abrirModal(
     '<label class="f"><span>Equipo</span><select class="inp" id="l-codigo">' +
-      modelosVisibles().filter(m => m.ventaUF || m.arriendoUF).map(m =>
-        '<option value="' + esc(m.codigo) + '"' + (l && l.codigo === m.codigo ? " selected" : "") + '>' +
-        esc(m.codigo) + " · " + esc(m.nombre || m.modelo || "") + (activo(m) ? "" : "  (inactivo)") +
-        '</option>').join("") + '</select></label>' +
+      modelosVisibles().map(m => {
+        const precio = c.modalidad === "Arriendo" ? m.arriendoUF : m.ventaUF;
+        return '<option value="' + esc(m.codigo) + '"' + (l && l.codigo === m.codigo ? " selected" : "") + '>' +
+          esc(m.codigo) + " · " + esc(m.nombre || m.modelo || "") +
+          (precio ? "" : "  (sin precio)") + (activo(m) ? "" : "  (inactivo)") + '</option>';
+      }).join("") + '</select></label>' +
     '<div class="f2"><label class="f"><span>Cantidad</span><input class="inp" id="l-cant" type="number" min="1" value="' + (l ? l.cant : 1) + '"></label>' +
     '<label class="f"><span>Descuento %</span><input class="inp" id="l-desc" type="number" min="0" max="100" value="' + (l ? (l.desc || 0) : 0) + '"></label></div>' +
+    (function(){
+      const mSel = modelo(l ? l.codigo : "") || null;
+      const pCat = mSel ? (c.modalidad === "Arriendo" ? mSel.arriendoUF : mSel.ventaUF) : null;
+      return '<label class="f"><span>Precio unitario en UF</span>' +
+        '<input class="inp" id="l-precio" type="number" step="0.01" min="0" value="' +
+        esc(l && l.precioManual != null ? l.precioManual : "") + '" placeholder="' +
+        (pCat ? "Catálogo: " + uf2(pCat) + " UF" : "Este modelo no tiene precio: escríbelo") + '"></label>' +
+        '<p class="mini" style="margin:0">En blanco usa el precio del catálogo.</p>';
+    })() +
     '<label class="f"><span>Envío de esta línea (CLP, opcional)</span>' +
       '<input class="inp" id="l-envio" type="number" min="0" value="' +
       esc(l && l.envioManual != null ? l.envioManual : "") + '" placeholder="Dejar vacío usa la tarifa"></label>' +
@@ -5571,7 +5585,8 @@ document.addEventListener("click", async ev => {
   if(a === "guardar-linea"){
     const linea = { codigo: val("l-codigo"), cant: Math.max(1, Number(val("l-cant")) || 1),
       desc: Number(val("l-desc")) || 0, destino: val("l-destino") || ultimoDestino(),
-      envioManual: val("l-envio") === "" ? null : Number(val("l-envio")) };
+      envioManual: val("l-envio") === "" ? null : Number(val("l-envio")),
+      precioManual: val("l-precio") === "" ? null : Number(val("l-precio")) };
     if(ctx.idx === null || ctx.idx === undefined) A.cot.lineas.push(linea);
     else A.cot.lineas[ctx.idx] = linea;
     await Store.set("cot", A.cot);
