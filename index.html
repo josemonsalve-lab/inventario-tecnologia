@@ -5657,8 +5657,10 @@ async function probarCX(){
   avisar("Consultando a Chilexpress…");
   try{
     const j = await llamarCX({ accion: "probar" });
-    if(!j.ok) return modalCX("No responde: " + (j.error || "") +
-      ((j.faltan || []).length ? " · Faltan claves: " + j.faltan.join(", ") : ""));
+    if(!j.ok) return modalCX((j.error || "No responde") +
+      ((j.faltan || []).length ? " · Faltan: " + j.faltan.join(", ") : "") +
+      ((j.secretos_visibles || []).length
+        ? " · La función sí ve: " + j.secretos_visibles.join(", ") : ""));
     modalCX("Conectado al ambiente de " + j.ambiente + ". " + j.regiones +
       " regiones con cobertura · origen: " + j.origen + " · cuenta " + j.cuenta + " · RUT " + j.rut +
       ((j.faltan || []).length ? " · faltan claves: " + j.faltan.join(", ") : ""));
