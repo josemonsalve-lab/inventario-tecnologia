@@ -370,6 +370,9 @@ const MAPA = {
   mantenimientos: { unidadId: "unidad_id", fechaIngreso: "fecha_ingreso", fechaSalida: "fecha_salida" },
   tareas: { asignadoA: "asignado_a", asignadoNombre: "asignado_nombre", creadorId: "creador_id",
     creadorNombre: "creador_nombre", zohoId: "zoho_id", zohoSync: "zoho_sync" },
+  envios: { comunaCodigo: "comuna_codigo", servicioCodigo: "servicio_codigo",
+    creadorNombre: "creador_nombre" },
+  direcciones: { comunaCodigo: "comuna_codigo" },
   cotizaciones: { usuarioId: "usuario_id", usuarioEmail: "usuario_email", envioUF: "envio_uf",
     instalacionUF: "instalacion_uf", totalUF: "total_uf" },
   proveedores: {}, movimientos: {}, fotos: {}
@@ -609,6 +612,10 @@ async function sincronizar(silencioso){
     A.cotizaciones = (await traerTodo("cotizaciones", "select=*&order=creada.desc")).map(f => deFila("cotizaciones", f));
     A.tareas = (await traerTodo("tareas", "select=*&order=creada.desc")).map(f => deFila("tareas", f));
     if(esAdmin()){
+      A.envios = (await traerTodo("envios", "select=*&order=fecha.desc")).map(f => deFila("envios", f));
+      A.direcciones = (await traerTodo("direcciones", "select=*&order=cliente")).map(f => deFila("direcciones", f));
+    }
+    if(esAdmin()){
       try{
         const filas = (await API.req("GET", "integraciones?select=clave,valor")) || [];
         const c = {}; for(const f of filas) c[f.clave] = f.valor || "";
@@ -621,7 +628,8 @@ async function sincronizar(silencioso){
     A.ultima = Date.now(); A.enLinea = true;
     await Store.set("cache", { modelos: A.modelos, proveedores: A.proveedores, unidades: A.unidades,
       movs: A.movs, dispo: A.dispo, facturas: A.facturas, cotizaciones: A.cotizaciones,
-      mantenimientos: A.mantenimientos, tareas: A.tareas, perfiles: A.perfiles, ts: A.ultima, rol: A.rol });
+      mantenimientos: A.mantenimientos, tareas: A.tareas, perfiles: A.perfiles,
+      envios: A.envios, direcciones: A.direcciones, ts: A.ultima, rol: A.rol });
   }catch(e){
     A.enLinea = false;
     if(!silencioso) avisar("Sin conexión: mostrando la última copia");
@@ -634,6 +642,7 @@ async function usarCache(){
   A.unidades = c.unidades || []; A.movs = c.movs || []; A.dispo = c.dispo || []; A.facturas = c.facturas || [];
   A.cotizaciones = c.cotizaciones || []; A.mantenimientos = c.mantenimientos || [];
   A.tareas = c.tareas || []; A.perfiles = c.perfiles || [];
+  A.envios = c.envios || []; A.direcciones = c.direcciones || [];
   A.ultima = c.ts; A.enLinea = false;
   return true;
 }
@@ -642,6 +651,7 @@ async function usarCache(){
 const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
   cotizaciones: [], cot: null, selEq: {}, mantenimientos: [], perfiles: [], tareas: [],
+  envios: [], direcciones: [], comunasCX: [],
   zoho: { activo: false, ultima: "", modo: "traer" },
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
@@ -654,7 +664,7 @@ const A = {
 const esAdmin = () => A.rol === "admin" || A.rol === "super";
 const esSuper = () => A.rol === "super";
 const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones", mantenimientos: "mantenimientos",
-  tareas: "tareas" };
+  tareas: "tareas", envios: "envios", direcciones: "direcciones" };
 
 const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -864,15 +874,17 @@ const ICO = {
   cotiza: "M7 3h10v18H7zM10 7h4M10 11h4M10 15h4",
   taller: "M14.7 6.3a4 4 0 01-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2z",
   panel: "M12 3a9 9 0 109 9h-9z M13 3v8h8a8 8 0 00-8-8z",
+  envios: "M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z",
   tareas: "M9 11l2 2 4-4M4 5h16v16H4zM9 3h6v2H9z"
 };
-const NAV_ADMIN = [["panel","Panel"],["tareas","Tareas"],["taller","Taller"],["proveedores","Proveedores"],
-  ["stock","Stock"],["equipos","Equipos"],["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
+const NAV_ADMIN = [["panel","Panel"],["tareas","Tareas"],["envios","Envíos"],["taller","Taller"],
+  ["proveedores","Proveedores"],["stock","Stock"],["equipos","Equipos"],["cotiza","Cotizar"],
+  ["reportes","Reportes"],["ajustes","Ajustes"]];
 const NAV_VEND  = [["panel","Panel"],["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
 const nav = () => esAdmin() ? NAV_ADMIN : NAV_VEND;
 const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", proveedores:"Proveedores",
   movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes",
-  panel:"Panel", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
+  panel:"Panel", envios:"Envíos", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
 
 function pintarNav(){
   document.getElementById("nav").innerHTML = nav().map(([id,txt]) => {
@@ -1002,8 +1014,10 @@ function vistaEquipos(){
       (nSel ? "Quitar" : "Todos") + '</button></div>' +
     (nSel ? '<button class="btn btn-celeste btn-w" style="margin-bottom:8px" data-accion="asignar-cliente">' +
       'Asignar ' + nf.format(nSel) + (nSel === 1 ? " equipo a un cliente" : " equipos a un cliente") + '</button>' +
-      '<button class="btn btn-linea btn-w" style="margin-bottom:10px" data-accion="liberar-equipos">' +
-      'Liberar ' + nf.format(nSel) + (nSel === 1 ? " equipo" : " equipos") + ' · dejar disponibles</button>' : "");
+      '<button class="btn btn-linea btn-w" style="margin-bottom:8px" data-accion="liberar-equipos">' +
+      'Liberar ' + nf.format(nSel) + (nSel === 1 ? " equipo" : " equipos") + ' · dejar disponibles</button>' +
+      '<button class="btn btn-linea btn-w" style="margin-bottom:10px" data-accion="enviar-equipos">' +
+      'Preparar envío con ' + nf.format(nSel) + (nSel === 1 ? " equipo" : " equipos") + '</button>' : "");
 
   return chips + selModelo + barra + '<div class="lista">' + enPantalla.map(u => {
     const m = modelo(u.codigo), p = proveedor(u.proveedorId), f = fotoEquipo(u);
@@ -1217,7 +1231,9 @@ function vistaAjustes(){
         '<button class="btn btn-rojo btn-w" data-accion="borrar">Borrar todos los datos</button>'
       : '<p class="mini" style="margin:10px 0 0">Vaciar equipos, deshacer importaciones y borrar datos ' +
         'quedan reservados al super administrador. Tu perfil es ' + esc(nombreRol(A.rol).toLowerCase()) + '.</p>') +
-    (REMOTO ? '<div class="sec">Zoho Projects</div>' +
+    (REMOTO ? '<div class="sec">Envíos</div>' +
+      '<button class="btn btn-linea btn-w" data-accion="cx-ajustes">Configurar Chilexpress</button>' +
+      '<div class="sec">Zoho Projects</div>' +
       '<button class="btn btn-linea btn-w" data-accion="zoho">Sincronizar tareas con Zoho</button>' : "") +
     '<div class="sec">Conexión</div>' +
     '<div class="fila"><div class="t"><b>' + (REMOTO ? esc(CFG.url) : "Sin conexión: modo local") + '</b>' +
@@ -3355,6 +3371,341 @@ function csvTareas(){
   descargarCSV("tareas-" + hoy(), cab, filas);
 }
 
+/* ------------------------------------------------------------- envíos */
+const EST_ENVIO = ["Preparando", "En tránsito", "Entregado", "Anulado"];
+const CLASE_ENVIO = { "Preparando": "pt-rev", "En tránsito": "pt-res",
+  "Entregado": "pt-disp", "Anulado": "pt-baja" };
+
+async function llamarCX(cuerpo){
+  const r = await fetch(API.base() + "/functions/v1/chilexpress", {
+    method: "POST", headers: API.cabeceras(), body: JSON.stringify(cuerpo || {})
+  });
+  let j = {};
+  try{ j = await r.json(); }catch(e){}
+  if(r.status === 404) throw new Error("Falta instalar la función 'chilexpress' en Supabase.");
+  if(!r.ok) throw new Error(j.error || ("Error " + r.status));
+  return j;
+}
+
+function vistaEnvios(){
+  const q = A.q.toLowerCase();
+  const f = A.filtro === "Todas" ? "Activos" : A.filtro;
+  const chips = '<div class="chips">' + ["Activos", ...EST_ENVIO, "Todos"].map(x =>
+    '<button class="chip ' + (f === x ? "on" : "") + '" data-sit="' + esc(x) + '">' + x + '</button>').join("") + '</div>';
+
+  const todos = A.envios.slice().sort((a, b) =>
+    String(b.fecha || "").localeCompare(String(a.fecha || "")));
+  const activos = todos.filter(e => e.estado === "Preparando" || e.estado === "En tránsito");
+  const es = todos.filter(e => {
+    if(f === "Activos" && !(e.estado === "Preparando" || e.estado === "En tránsito")) return false;
+    if(f !== "Activos" && f !== "Todos" && e.estado !== f) return false;
+    if(!q) return true;
+    return [e.cliente, e.ot, e.comuna, e.direccion, (e.series || []).join(" ")]
+      .filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+
+  const resumen = '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+    '<tr><td>En preparación</td><td>' + nf.format(todos.filter(e => e.estado === "Preparando").length) + '</td></tr>' +
+    '<tr><td>En tránsito</td><td>' + nf.format(todos.filter(e => e.estado === "En tránsito").length) + '</td></tr>' +
+    '<tr><td>Equipos en camino</td><td>' + nf.format(activos.reduce((a, e) => a + (e.series || []).length, 0)) + '</td></tr>' +
+    '</table></div>' +
+    (activos.some(e => e.ot) ? '<button class="btn btn-linea btn-w" style="margin-bottom:12px" ' +
+      'data-accion="seguir-envios">Actualizar seguimiento de Chilexpress</button>' : "");
+
+  if(!todos.length) return chips + resumen +
+    vacio("Sin envíos", "Registra el despacho de equipos a un cliente y sigue su estado con Chilexpress.",
+      "Nuevo envío", "nuevo-envio");
+  if(!es.length) return chips + resumen + '<p class="mini">Nada con ese filtro.</p>';
+
+  return chips + resumen + '<div class="lista">' + es.slice(0, 200).map(e =>
+    '<button class="fila" data-envio="' + e.id + '"><div class="t">' +
+      '<b>' + esc(e.cliente) + '</b>' +
+      '<span>' + (e.series || []).length + (e.series.length === 1 ? " equipo" : " equipos") +
+        (e.comuna ? " · " + esc(e.comuna) : "") +
+        (e.fecha ? " · " + fechaCorta(e.fecha) : "") + '</span>' +
+      (e.ot ? '<span>OT ' + esc(e.ot) + (e.servicio ? " · " + esc(e.servicio) : "") + '</span>' : "") +
+      (e.seguimiento && e.estado !== "Entregado" ? '<span class="detalle">' +
+        esc(ultimoEstadoCX(e)) + '</span>' : "") + '</div>' +
+      '<span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></button>').join("") +
+    '</div>';
+}
+
+/* Chilexpress entrega los eventos del más reciente al más antiguo. */
+const eventosCX = e => ((e.seguimiento || {}).trackingEvents || []);
+function ultimoEstadoCX(e){
+  const u = eventosCX(e)[0] || {};
+  const d = (e.seguimiento || {}).transportOrderData || {};
+  return u.description || d.status || "";
+}
+function fechaEventoCX(x){
+  const f = String(x.eventDate || "");                 // viene mm/dd/aaaa
+  const m = f.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  return (m ? m[2] + "-" + m[1] + "-" + m[3] : f) + (x.eventHour ? " " + String(x.eventHour).slice(0, 5) : "");
+}
+
+/* --- nuevo envío --- */
+function modalEnvio(id){
+  const e = id ? A.envios.find(x => x.id === id) : null;
+  ctx = { tipo: "envio", id: id || null, series: e ? (e.series || []).slice() : seriesSeleccionadas(),
+    opciones: [], comuna: e ? e.comuna : "", comunaCodigo: e ? e.comunaCodigo : "" };
+  pintarEnvio();
+}
+
+function seriesSeleccionadas(){
+  return A.unidades.filter(u => A.selEq[u.id]).map(u => u.serie);
+}
+
+function pintarEnvio(aviso){
+  const e = ctx.id ? A.envios.find(x => x.id === ctx.id) : null;
+  const g = k => e && e[k] != null ? e[k] : "";
+  const clientes = [...new Set(A.unidades.map(u => u.cliente).filter(Boolean))].sort();
+  const dir = (A.direcciones || []).find(d => d.cliente === (ctx.cliente || g("cliente")));
+
+  abrirModal(
+    (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
+    '<label class="f"><span>Cliente</span><input class="inp" id="e-cliente" list="clientesEnv" value="' +
+      esc(ctx.cliente != null ? ctx.cliente : g("cliente")) + '"></label>' +
+    '<datalist id="clientesEnv">' + clientes.map(c => '<option value="' + esc(c) + '">').join("") + '</datalist>' +
+    '<label class="f"><span>Dirección</span><input class="inp" id="e-direccion" value="' +
+      esc(ctx.direccion != null ? ctx.direccion : (g("direccion") || (dir ? dir.direccion : ""))) + '"></label>' +
+    '<div class="f2"><label class="f"><span>Comuna</span><input class="inp" id="e-comuna" list="comunasCX" value="' +
+      esc(ctx.comuna || g("comuna") || (dir ? dir.comuna : "")) + '"></label>' +
+    '<label class="f"><span>Teléfono</span><input class="inp" id="e-telefono" value="' +
+      esc(ctx.telefono != null ? ctx.telefono : (g("telefono") || (dir ? dir.telefono : ""))) + '"></label></div>' +
+    '<datalist id="comunasCX">' + (A.comunasCX || []).map(c =>
+      '<option value="' + esc(c.nombre) + '">').join("") + '</datalist>' +
+    (!(A.comunasCX || []).length
+      ? '<button class="btn btn-suave btn-w" data-accion="cargar-comunas">Cargar las comunas de Chilexpress</button>'
+      : "") +
+    '<label class="f"><span>Contacto que recibe</span><input class="inp" id="e-contacto" value="' +
+      esc(ctx.contacto != null ? ctx.contacto : (g("contacto") || (dir ? dir.contacto : ""))) + '"></label>' +
+
+    '<div class="sec">Equipos</div>' +
+    '<label class="f"><span>Series, separadas por coma o salto de línea</span>' +
+    '<textarea class="inp" id="e-series" rows="3">' + esc((ctx.series || []).join(", ")) + '</textarea></label>' +
+    '<p class="mini" style="margin:0">Si marcas equipos en la pestaña Equipos antes de abrir esto, ' +
+    'llegan escritos solos.</p>' +
+
+    '<div class="sec">Bulto</div>' +
+    '<div class="f2"><label class="f"><span>Peso (kg)</span><input class="inp" id="e-peso" type="number" step="0.1" value="' +
+      esc(g("peso") || 1) + '"></label>' +
+    '<label class="f"><span>Alto (cm)</span><input class="inp" id="e-alto" type="number" value="' + esc(g("alto") || 20) + '"></label></div>' +
+    '<div class="f2"><label class="f"><span>Ancho (cm)</span><input class="inp" id="e-ancho" type="number" value="' + esc(g("ancho") || 20) + '"></label>' +
+    '<label class="f"><span>Largo (cm)</span><input class="inp" id="e-largo" type="number" value="' + esc(g("largo") || 30) + '"></label></div>' +
+
+    (ctx.opciones && ctx.opciones.length
+      ? '<div class="sec">Servicios disponibles</div><div class="lista">' + ctx.opciones.map(o =>
+        '<button class="fila' + (ctx.servicioCodigo === o.codigo ? " sel" : "") + '" data-cxserv="' + esc(o.codigo) + '">' +
+        '<div class="t"><b>' + esc(o.nombre) + '</b><span>' + esc(o.dias || "") + '</span></div>' +
+        '<b style="color:var(--azul)">' + clp(o.precio) + '</b></button>').join("") + '</div>'
+      : "") +
+
+    '<label class="f"><span>Notas</span><input class="inp" id="e-notas" value="' + esc(g("notas")) + '"></label>' +
+    '<button class="btn btn-linea btn-w" data-accion="cotizar-envio">Cotizar con Chilexpress</button>' +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-envio">' +
+      (ctx.id ? "Guardar cambios" : "Registrar el envío") + '</button>',
+    ctx.id ? "Envío" : "Nuevo envío");
+}
+
+function leerEnvio(){
+  const v = id => { const x = document.getElementById(id); return x ? x.value : null; };
+  ["cliente", "direccion", "comuna", "telefono", "contacto", "notas"].forEach(k => {
+    if(v("e-" + k) !== null) ctx[k] = v("e-" + k);
+  });
+  ["peso", "alto", "ancho", "largo"].forEach(k => {
+    if(v("e-" + k) !== null) ctx[k] = Number(v("e-" + k)) || 0;
+  });
+  const s = v("e-series");
+  if(s !== null) ctx.series = s.split(/[,\n]+/).map(x => x.trim()).filter(Boolean);
+  const c = (A.comunasCX || []).find(x => sinTildes(x.nombre) === sinTildes(ctx.comuna || ""));
+  ctx.comunaCodigo = c ? c.codigo : (ctx.comunaCodigo || "");
+}
+
+async function cargarComunasCX(){
+  leerEnvio();
+  avisar("Consultando a Chilexpress…");
+  try{
+    const j = await llamarCX({ accion: "comunas" });
+    A.comunasCX = j.comunas || [];
+    await Store.set("comunasCX", A.comunasCX);
+    pintarEnvio(A.comunasCX.length + " comunas cargadas. Elige la del cliente.");
+  }catch(err){ pintarEnvio(err.message); }
+}
+
+async function cotizarEnvio(){
+  leerEnvio();
+  if(!ctx.comunaCodigo) return pintarEnvio("Elige una comuna de la lista de Chilexpress");
+  avisar("Cotizando…");
+  try{
+    const j = await llamarCX({ accion: "cotizar", destino: ctx.comunaCodigo,
+      peso: ctx.peso, alto: ctx.alto, ancho: ctx.ancho, largo: ctx.largo });
+    ctx.opciones = j.opciones || [];
+    pintarEnvio(ctx.opciones.length ? "" : "Chilexpress no devolvió servicios para esa comuna");
+  }catch(err){ pintarEnvio(err.message); }
+}
+
+async function guardarEnvio(){
+  leerEnvio();
+  if(!ctx.cliente) return pintarEnvio("Falta el cliente");
+  const sel = (ctx.opciones || []).find(o => o.codigo === ctx.servicioCodigo);
+  const datos = {
+    cliente: ctx.cliente, direccion: ctx.direccion || "", comuna: ctx.comuna || "",
+    comunaCodigo: ctx.comunaCodigo || "", telefono: ctx.telefono || "", contacto: ctx.contacto || "",
+    series: ctx.series || [], peso: ctx.peso || 1, alto: ctx.alto || 20,
+    ancho: ctx.ancho || 20, largo: ctx.largo || 30, notas: ctx.notas || "",
+    servicio: sel ? sel.nombre : (ctx.id ? undefined : ""),
+    servicioCodigo: sel ? sel.codigo : (ctx.id ? undefined : ""),
+    costo: sel ? sel.precio : (ctx.id ? undefined : null)
+  };
+  let e;
+  if(ctx.id){ e = A.envios.find(x => x.id === ctx.id); Object.assign(e, datos); }
+  else {
+    e = Object.assign({ id: uuid(), estado: "Preparando", fecha: hoy(),
+      creadorNombre: Sesion.nombre || Sesion.email || "local" }, datos);
+    A.envios.unshift(e);
+  }
+  await persistir("envios", e);
+  await guardarDireccion(e);
+  registrar((ctx.id ? "Envío editado: " : "Envío registrado: ") + e.cliente +
+    " · " + (e.series || []).length + " equipos", (e.series || [])[0] || "");
+  A.selEq = {};
+  cerrarModal(); pintar();
+  avisar(ctx.id ? "Envío actualizado" : "Envío registrado");
+}
+
+/* La dirección del cliente se recuerda para el próximo envío. */
+async function guardarDireccion(e){
+  if(!e.cliente || !e.direccion) return;
+  const d = { cliente: e.cliente, contacto: e.contacto, telefono: e.telefono,
+    email: e.email || "", direccion: e.direccion, comuna: e.comuna, comunaCodigo: e.comunaCodigo };
+  A.direcciones = (A.direcciones || []).filter(x => x.cliente !== e.cliente).concat([d]);
+  if(REMOTO){
+    try{
+      await API.req("POST", "direcciones?on_conflict=cliente", [aFila("direcciones", d)],
+        "resolution=merge-duplicates,return=minimal");
+    }catch(err){ /* no es crítico */ }
+  } else await Store.set("direcciones", A.direcciones);
+}
+
+/* --- ficha del envío --- */
+function fichaEnvio(id){
+  const e = A.envios.find(x => x.id === id);
+  if(!e) return;
+  ctx = { tipo: "ficha-envio", id: id };
+  pintarFichaEnvio();
+}
+
+function pintarFichaEnvio(aviso){
+  const e = A.envios.find(x => x.id === ctx.id);
+  const ev = eventosCX(e);
+  const tod = (e.seguimiento || {}).transportOrderData || {};
+  const ent = (e.seguimiento || {}).deliveryData || {};
+  abrirModal(
+    (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
+    '<div class="fila" style="display:block;background:var(--fondo)"><div class="t">' +
+      '<b style="font-size:15px">' + esc(e.cliente) + '</b>' +
+      '<span>' + esc(e.direccion || "") + (e.comuna ? ", " + esc(e.comuna) : "") + '</span>' +
+      (e.contacto || e.telefono ? '<span>' + esc([e.contacto, e.telefono].filter(Boolean).join(" · ")) + '</span>' : "") +
+      '</div><span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></div>' +
+
+    '<div class="fila" style="display:block"><table class="specs">' +
+      '<tr><td>Equipos</td><td>' + (e.series || []).length + '</td></tr>' +
+      (e.ot ? '<tr><td>Orden de transporte</td><td>' + esc(e.ot) + '</td></tr>' : "") +
+      (e.servicio ? '<tr><td>Servicio</td><td>' + esc(e.servicio) + '</td></tr>' : "") +
+      (tod.status ? '<tr><td>Estado en Chilexpress</td><td>' + esc(tod.status) +
+        (tod.locationStatus ? " · " + esc(tod.locationStatus) : "") + '</td></tr>' : "") +
+      (e.costo ? '<tr><td>Costo</td><td>' + clp(e.costo) + '</td></tr>' : "") +
+      '<tr><td>Fecha</td><td>' + fechaCorta(e.fecha) + '</td></tr>' +
+      (e.entregado ? '<tr><td>Entregado</td><td>' + fechaCorta(e.entregado) + '</td></tr>' : "") +
+    '</table></div>' +
+
+    '<div class="sec">Series</div>' +
+    '<p class="mini" style="margin:0">' + esc((e.series || []).join(", ") || "sin equipos") + '</p>' +
+
+    (ev.length ? '<div class="sec">Seguimiento</div>' +
+      (ent.receptorName ? '<p class="mini" style="margin:0 0 6px">Recibió ' + esc(ent.receptorName) +
+        (ent.deliveryDate ? " el " + esc(ent.deliveryDate) + " a las " + esc(ent.deliveryHour || "") : "") +
+        '</p>' : "") +
+      '<div class="lista">' + ev.slice(0, 8).map(x =>
+      '<div class="fila"><div class="t"><b>' + esc(x.description || "") + '</b>' +
+      '<span>' + esc(fechaEventoCX(x)) + (x.location ? " · " + esc(x.location) : "") + '</span>' +
+      (x.motive ? '<span>' + esc(x.motive) + '</span>' : "") + '</div>' +
+      (x.certificadoEntrega ? '<a class="btn btn-linea btn-sm" target="_blank" href="' +
+        esc(x.certificadoEntrega) + '">Certificado</a>' : "") + '</div>').join("") + '</div>' : "") +
+
+    (e.ot ? "" : '<button class="btn btn-azul btn-w" data-accion="emitir-ot">Emitir orden de transporte</button>') +
+    (e.ot ? '<button class="btn btn-linea btn-w" data-accion="seguir-uno">Actualizar seguimiento</button>' : "") +
+    (e.etiqueta ? '<button class="btn btn-linea btn-w" data-accion="ver-etiqueta">Ver la etiqueta</button>' : "") +
+    '<button class="btn btn-linea btn-w" data-accion="editar-envio">Editar los datos</button>' +
+    (e.estado !== "Entregado"
+      ? '<button class="btn btn-celeste btn-w" data-accion="envio-entregado">Marcar como entregado</button>' : "") +
+    '<button class="btn btn-suave btn-w" data-accion="anular-envio">Anular</button>',
+    "Envío");
+}
+
+async function emitirOT(){
+  const e = A.envios.find(x => x.id === ctx.id);
+  if(!e.comunaCodigo) return pintarFichaEnvio("Falta la comuna de Chilexpress: edita los datos y elígela de la lista.");
+  avisar("Emitiendo la orden…");
+  try{
+    const j = await llamarCX({ accion: "crear", id: e.id });
+    await sincronizar(true);
+    pintar();
+    if(j.ot){ fichaEnvio(e.id); avisar("Orden " + j.ot + " emitida"); }
+    else pintarFichaEnvio("Chilexpress no devolvió número de orden. " + JSON.stringify(j.crudo || {}).slice(0, 200));
+  }catch(err){ pintarFichaEnvio(err.message); }
+}
+
+async function seguirEnvios(uno){
+  avisar("Consultando a Chilexpress…");
+  try{
+    const e = uno ? A.envios.find(x => x.id === ctx.id) : null;
+    const j = await llamarCX({ accion: "seguir", ot: e ? e.ot : "" });
+    await sincronizar(true);
+    pintar();
+    if(uno){ fichaEnvio(e.id); }
+    const malos = (j.detalle || []).filter(x => x.error).length;
+    avisar("Revisados " + j.revisados + (malos ? ", " + malos + " con error" : ""));
+  }catch(err){
+    if(uno) pintarFichaEnvio(err.message);
+    else { A.ultimoError = "Chilexpress: " + err.message; A.sinGuardar = true; pintar(); }
+  }
+}
+
+async function cerrarEnvio(estado){
+  const e = A.envios.find(x => x.id === ctx.id);
+  e.estado = estado;
+  if(estado === "Entregado"){
+    e.entregado = hoy();
+    /* los equipos del envío quedan entregados a ese cliente */
+    const us = A.unidades.filter(u => (e.series || []).indexOf(u.serie) >= 0);
+    us.forEach(u => { u.cliente = e.cliente; u.entrega = hoy(); u.situacion = "Entregado"; });
+    if(us.length) await persistirLote("unidades", us);
+  }
+  await persistir("envios", e);
+  registrar("Envío " + estado.toLowerCase() + ": " + e.cliente, (e.series || [])[0] || "");
+  cerrarModal(); pintar();
+  avisar(estado === "Entregado"
+    ? "Entregado · " + (e.series || []).length + " equipos actualizados"
+    : "Envío anulado");
+}
+
+function verEtiqueta(){
+  const e = A.envios.find(x => x.id === ctx.id);
+  if(!e.etiqueta) return;
+  if(/^https?:/.test(e.etiqueta)) return window.open(e.etiqueta, "_blank");
+  try{
+    const bin = atob(e.etiqueta);
+    const arr = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = "etiqueta-" + (e.ot || e.cliente) + ".pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }catch(err){ avisar("No se pudo abrir la etiqueta"); }
+}
+
 function vistaTareas(){
   const q = A.q.toLowerCase();
   const f = A.filtro === "Todas" ? "Pendientes" : A.filtro;
@@ -3677,7 +4028,8 @@ function pintar(){
     ["movs","ajustes","cotiza","reportes"].indexOf(A.vista) >= 0;
   const v = { stock: vistaStock, equipos: vistaEquipos, proveedores: vistaProveedores, movs: vistaMovs,
     ajustes: vistaAjustes, dispo: vistaDisponibilidad, cuenta: vistaCuenta, cotiza: vistaCotizador,
-    reportes: vistaReportes, taller: vistaTaller, tareas: vistaTareas, panel: vistaPanel }[A.vista];
+    reportes: vistaReportes, taller: vistaTaller, tareas: vistaTareas, panel: vistaPanel,
+    envios: vistaEnvios }[A.vista];
   document.getElementById("vista").innerHTML =
     (!REMOTO && location.protocol.indexOf("http") === 0
       ? '<div class="aviso" style="margin-top:14px;background:#fff4e0;color:#a76a00">' +
@@ -5252,6 +5604,67 @@ async function probarZoho(){
   }
 }
 
+/* --- datos del remitente para Chilexpress --- */
+async function modalCX(aviso){
+  let cfg = {};
+  try{
+    const filas = (await API.req("GET", "integraciones?select=clave,valor")) || [];
+    for(const f of filas) cfg[f.clave] = f.valor || "";
+  }catch(e){}
+  ctx = { tipo: "cx" };
+  const campo = (id, et, ayuda) =>
+    '<label class="f"><span>' + et + '</span><input class="inp" id="' + id + '" value="' +
+    esc(cfg[id.replace("x-", "cx_")] || "") + '"></label>' +
+    (ayuda ? '<p class="mini" style="margin:0">' + ayuda + '</p>' : "");
+  abrirModal(
+    (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
+    '<p class="mini" style="margin:0">Datos del remitente, los mismos para todos los envíos. Las claves ' +
+    'de la API van en los Secrets de la función, no acá.</p>' +
+    campo("x-cuenta", "Número de cuenta corriente con Chilexpress") +
+    campo("x-rut", "RUT de la empresa",
+      "Sin puntos ni dígito verificador, por ejemplo 77398220. El seguimiento no funciona sin él.") +
+    campo("x-origen_nombre", "Comuna de origen") +
+    campo("x-origen_codigo", "Código de esa comuna",
+      "Es el código de cobertura; lo entrega el botón de comunas al preparar un envío.") +
+    campo("x-direccion", "Dirección de retiro") +
+    '<div class="f2">' +
+      '<label class="f"><span>Contacto</span><input class="inp" id="x-contacto" value="' +
+        esc(cfg.cx_contacto || "") + '"></label>' +
+      '<label class="f"><span>Teléfono</span><input class="inp" id="x-telefono" value="' +
+        esc(cfg.cx_telefono || "") + '"></label></div>' +
+    '<label class="f"><span>Ambiente</span><select class="inp" id="x-ambiente">' +
+      opciones(["prueba", "produccion"], cfg.cx_ambiente || "prueba") + '</select></label>' +
+    '<p class="mini" style="margin:0">Mientras configuras, deja <i>prueba</i>: usa el ambiente de ensayo ' +
+    'de Chilexpress y no genera envíos reales.</p>' +
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-cx">Guardar</button>' +
+    '<button class="btn btn-linea btn-w" data-accion="probar-cx">Probar la conexión</button>',
+    "Chilexpress");
+}
+
+async function guardarCX(){
+  const claves = ["cuenta", "rut", "origen_nombre", "origen_codigo", "direccion", "contacto",
+    "telefono", "ambiente"];
+  try{
+    await API.req("POST", "integraciones?on_conflict=clave",
+      claves.map(k => ({ clave: "cx_" + k, valor: val("x-" + k) || "" })),
+      "resolution=merge-duplicates,return=minimal");
+    cerrarModal(); pintar();
+    avisar("Datos de Chilexpress guardados");
+  }catch(e){ fallo(e, "integraciones"); }
+}
+
+async function probarCX(){
+  avisar("Consultando a Chilexpress…");
+  try{
+    const j = await llamarCX({ accion: "probar" });
+    if(!j.ok) return modalCX("No responde: " + (j.error || "") +
+      ((j.faltan || []).length ? " · Faltan claves: " + j.faltan.join(", ") : ""));
+    modalCX("Conectado al ambiente de " + j.ambiente + ". " + j.regiones +
+      " regiones con cobertura · origen: " + j.origen + " · cuenta " + j.cuenta + " · RUT " + j.rut +
+      ((j.faltan || []).length ? " · faltan claves: " + j.faltan.join(", ") : ""));
+  }catch(e){ modalCX(e.message); }
+}
+
 /* --- conexión con el servidor --- */
 function modalConexion(){
   ctx = { tipo: "conexion" };
@@ -5416,7 +5829,7 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy],[data-ir],[data-pgrupo],[data-pperiodo]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy],[data-ir],[data-pgrupo],[data-pperiodo],[data-envio],[data-cxserv]");
   if(!t) return;
   const d = t.dataset;
 
@@ -5480,6 +5893,8 @@ document.addEventListener("click", async ev => {
   if(d.usuario) return modalUsuario(d.usuario);
   if(d.zproy) return elegirProyectoZoho(d.zproy);
   if(d.persona){ A.filtroPersona = d.persona; A.filtro = "Todo"; return pintar(); }
+  if(d.envio) return fichaEnvio(d.envio);
+  if(d.cxserv){ leerEnvio(); ctx.servicioCodigo = d.cxserv; return pintarEnvio(); }
   if(d.tarea) return modalTarea(d.tarea);
   if(d.hecha) return marcarTarea(d.hecha);
   if(d.seleq){ A.selEq[d.seleq] = !A.selEq[d.seleq]; return pintar(); }
@@ -5496,6 +5911,7 @@ document.addEventListener("click", async ev => {
   if(d.abrir === "nuevo-proveedor") return modalProveedor(null);
   if(d.abrir === "nuevo-taller") return modalNuevoTaller("");
   if(d.abrir === "nueva-tarea") return modalTarea(null);
+  if(d.abrir === "nuevo-envio") return modalEnvio(null);
 
   const a = d.accion;
   if(a === "entrar") return entrar();
@@ -5682,6 +6098,7 @@ document.addEventListener("click", async ev => {
   if(a === "eq-ninguno"){ A.selEq = {}; return pintar(); }
   if(a === "asignar-cliente") return modalAsignarCliente();
   if(a === "liberar-equipos") return modalLiberar();
+  if(a === "enviar-equipos"){ A.vista = "envios"; pintar(); return modalEnvio(null); }
   if(a === "confirmar-liberar") return liberarEquipos();
   if(a === "guardar-asignacion") return asignarCliente();
   if(a === "buscar-serie-taller"){
@@ -5711,6 +6128,16 @@ document.addEventListener("click", async ev => {
   if(a === "revisar-tarea"){ leerTareaNueva(); ctx.paso = 2; return pintarTareaNueva(); }
   if(a === "volver-tarea"){ ctx.paso = 1; return pintarTareaNueva(); }
   if(a === "confirmar-tarea") return crearTarea();
+  if(a === "cargar-comunas") return cargarComunasCX();
+  if(a === "cotizar-envio") return cotizarEnvio();
+  if(a === "guardar-envio") return guardarEnvio();
+  if(a === "editar-envio"){ const id = ctx.id; cerrarModal(); return modalEnvio(id); }
+  if(a === "emitir-ot") return emitirOT();
+  if(a === "seguir-uno") return seguirEnvios(true);
+  if(a === "seguir-envios") return seguirEnvios(false);
+  if(a === "ver-etiqueta") return verEtiqueta();
+  if(a === "envio-entregado") return cerrarEnvio("Entregado");
+  if(a === "anular-envio") return cerrarEnvio("Anulado");
   if(a === "csv-tareas") return csvTareas();
   if(a === "guardar-solucion") return guardarSolucion("");
   if(a === "cerrar-tarea") return guardarSolucion("cerrar");
@@ -5738,6 +6165,9 @@ document.addEventListener("click", async ev => {
   if(a === "confirmar-vaciar") return vaciarEquipos();
   if(a === "deshacer-importacion") return modalDeshacer();
   if(a === "confirmar-deshacer") return deshacerImportacion();
+  if(a === "cx-ajustes") return modalCX("");
+  if(a === "guardar-cx") return guardarCX();
+  if(a === "probar-cx") return probarCX();
   if(a === "zoho") return modalZoho();
   if(a === "guardar-zoho") return guardarZoho();
   if(a === "listar-zoho") return listarZoho();
@@ -5865,6 +6295,7 @@ document.addEventListener("change", async ev => {
 document.getElementById("q").addEventListener("input", e => { A.q = e.target.value.trim(); pintar(); });
 document.getElementById("fab").addEventListener("click", () => {
   if(A.vista === "proveedores") return modalProveedor(null);
+  if(A.vista === "envios") return modalEnvio(null);
   if(A.vista === "tareas") return modalTarea(null);
   if(A.vista === "taller") return modalNuevoTaller("");
   if(A.vista === "equipos") return modalIngreso(null);
@@ -6035,6 +6466,7 @@ function vigilar(){
 /* -------------------------------------------------------------------- arranque */
 (async function inicio(){
   await Store.iniciar();
+  A.comunasCX = (await Store.get("comunasCX")) || [];
   try{
     const guardada = await Store.get("conexion");
     if(conexionValida(guardada)){ CFG = guardada; REMOTO = true; }
@@ -6053,6 +6485,8 @@ function vigilar(){
     A.cotizaciones = (await Store.get("cotizaciones")) || [];
     A.mantenimientos = (await Store.get("mantenimientos")) || [];
     A.tareas = (await Store.get("tareas")) || [];
+    A.envios = (await Store.get("envios")) || [];
+    A.direcciones = (await Store.get("direcciones")) || [];
     pintar();
     for(const m of A.modelos){ await cargarFotosModelo(m); }
     pintar();
