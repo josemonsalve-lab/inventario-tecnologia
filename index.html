@@ -5605,7 +5605,7 @@ async function probarZoho(){
 }
 
 /* --- datos del remitente para Chilexpress --- */
-async function modalCX(aviso){
+async function modalCX(aviso, bien){
   let cfg = {};
   try{
     const filas = (await API.req("GET", "integraciones?select=clave,valor")) || [];
@@ -5617,15 +5617,18 @@ async function modalCX(aviso){
     esc(cfg[id.replace("x-", "cx_")] || "") + '"></label>' +
     (ayuda ? '<p class="mini" style="margin:0">' + ayuda + '</p>' : "");
   abrirModal(
-    (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
+    (aviso ? '<div class="aviso"' + (bien
+      ? ' style="background:#eef6dd;color:var(--lima-texto)"' : "") + '>' + esc(aviso) + '</div>' : "") +
     '<p class="mini" style="margin:0">Datos del remitente, los mismos para todos los envíos. Las claves ' +
     'de la API van en los Secrets de la función, no acá.</p>' +
     campo("x-cuenta", "Número de cuenta corriente con Chilexpress") +
     campo("x-rut", "RUT de la empresa",
       "Sin puntos ni dígito verificador, por ejemplo 77398220. El seguimiento no funciona sin él.") +
     campo("x-origen_nombre", "Comuna de origen") +
-    campo("x-origen_codigo", "Código de esa comuna",
-      "Es el código de cobertura; lo entrega el botón de comunas al preparar un envío.") +
+    campo("x-origen_codigo", "Código de esa comuna") +
+    '<button class="btn btn-suave btn-w" data-accion="buscar-origen">Buscar el código de esa comuna</button>' +
+    '<p class="mini" style="margin:0">Escribe la comuna de arriba y pulsa el botón: la app la busca en ' +
+    'la cobertura de Chilexpress y completa el código.</p>' +
     campo("x-direccion", "Dirección de retiro") +
     '<div class="f2">' +
       '<label class="f"><span>Contacto</span><input class="inp" id="x-contacto" value="' +
@@ -5639,6 +5642,34 @@ async function modalCX(aviso){
     '<button class="btn btn-celeste btn-w" data-accion="guardar-cx">Guardar</button>' +
     '<button class="btn btn-linea btn-w" data-accion="probar-cx">Probar la conexión</button>',
     "Chilexpress");
+}
+
+/* Busca en la cobertura de Chilexpress el código de la comuna escrita. */
+async function buscarOrigenCX(){
+  const nombre = val("x-origen_nombre");
+  if(!nombre) return modalCX("Escribe primero la comuna de origen");
+  avisar("Buscando la comuna…");
+  try{
+    if(!(A.comunasCX || []).length){
+      const j = await llamarCX({ accion: "comunas" });
+      A.comunasCX = j.comunas || [];
+      await Store.set("comunasCX", A.comunasCX);
+    }
+    const n = sinTildes(nombre);
+    const c = A.comunasCX.find(x => sinTildes(x.nombre) === n) ||
+              A.comunasCX.find(x => sinTildes(x.nombre).indexOf(n) >= 0);
+    if(!c){
+      const parecidas = A.comunasCX.filter(x => sinTildes(x.nombre).indexOf(n.slice(0, 4)) >= 0)
+        .slice(0, 6).map(x => x.nombre);
+      return modalCX("No encontré esa comuna entre las " + A.comunasCX.length + " con cobertura." +
+        (parecidas.length ? " ¿Será alguna de estas? " + parecidas.join(", ") : ""));
+    }
+    await API.req("POST", "integraciones?on_conflict=clave", [
+      { clave: "cx_origen_nombre", valor: c.nombre },
+      { clave: "cx_origen_codigo", valor: c.codigo }
+    ], "resolution=merge-duplicates,return=minimal");
+    modalCX(c.nombre + " · código " + c.codigo, true);
+  }catch(e){ modalCX(e.message); }
 }
 
 async function guardarCX(){
@@ -5663,7 +5694,7 @@ async function probarCX(){
         ? " · La función sí ve: " + j.secretos_visibles.join(", ") : ""));
     modalCX("Conectado al ambiente de " + j.ambiente + ". " + j.regiones +
       " regiones con cobertura · origen: " + j.origen + " · cuenta " + j.cuenta + " · RUT " + j.rut +
-      ((j.faltan || []).length ? " · faltan claves: " + j.faltan.join(", ") : ""));
+      ((j.faltan || []).length ? " · faltan claves: " + j.faltan.join(", ") : ""), true);
   }catch(e){ modalCX(e.message); }
 }
 
@@ -6170,6 +6201,7 @@ document.addEventListener("click", async ev => {
   if(a === "cx-ajustes") return modalCX("");
   if(a === "guardar-cx") return guardarCX();
   if(a === "probar-cx") return probarCX();
+  if(a === "buscar-origen") return buscarOrigenCX();
   if(a === "zoho") return modalZoho();
   if(a === "guardar-zoho") return guardarZoho();
   if(a === "listar-zoho") return listarZoho();
