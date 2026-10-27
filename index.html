@@ -5698,9 +5698,13 @@ async function probarCX(){
       ((j.faltan || []).length ? " · Faltan: " + j.faltan.join(", ") : "") +
       ((j.secretos_visibles || []).length
         ? " · La función sí ve: " + j.secretos_visibles.join(", ") : ""));
-    modalCX("Conectado al ambiente de " + j.ambiente + ". " + j.regiones +
-      " regiones con cobertura · origen: " + j.origen + " · cuenta " + j.cuenta + " · RUT " + j.rut +
-      ((j.faltan || []).length ? " · faltan claves: " + j.faltan.join(", ") : ""), true);
+    const bienTarifa = String(j.tarifa || "").indexOf("responde") === 0;
+    modalCX("Ambiente de " + j.ambiente + " · " + j.regiones + " regiones · origen " + j.origen +
+      " · cuenta " + j.cuenta + " · RUT " + j.rut +
+      ((j.faltan || []).length ? " · faltan claves: " + j.faltan.join(", ") : "") +
+      "  —  Tarificación: " + (j.tarifa || "no probada") +
+      (!bienTarifa && j.tarifa_sin_cuenta && j.tarifa_sin_cuenta !== "no probada"
+        ? "  —  Sin la cuenta: " + j.tarifa_sin_cuenta : ""), bienTarifa);
   }catch(e){ modalCX(e.message); }
 }
 
