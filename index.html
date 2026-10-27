@@ -3542,7 +3542,11 @@ async function cotizarEnvio(){
     const j = await llamarCX({ accion: "cotizar", destino: ctx.comunaCodigo,
       peso: ctx.peso, alto: ctx.alto, ancho: ctx.ancho, largo: ctx.largo });
     ctx.opciones = j.opciones || [];
-    pintarEnvio(ctx.opciones.length ? "" : "Chilexpress no devolvió servicios para esa comuna");
+    pintarEnvio(!ctx.opciones.length
+      ? "Chilexpress no devolvió servicios para esa comuna"
+      : (j.sin_convenio
+        ? "Chilexpress no reconoció la cuenta, así que estos son precios de lista, sin tu convenio."
+        : ""));
   }catch(err){ pintarEnvio(err.message); }
 }
 
