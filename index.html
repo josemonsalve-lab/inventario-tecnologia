@@ -3528,7 +3528,9 @@ async function cargarComunasCX(){
     const j = await llamarCX({ accion: "comunas" });
     A.comunasCX = j.comunas || [];
     await Store.set("comunasCX", A.comunasCX);
-    pintarEnvio(A.comunasCX.length + " comunas cargadas. Elige la del cliente.");
+    pintarEnvio(A.comunasCX.length + " comunas cargadas de " + (j.regiones || "?") + " regiones. " +
+      "Elige la del cliente." + ((j.sin_datos || []).length
+        ? " Sin cobertura devuelta: " + j.sin_datos.join(", ") : ""));
   }catch(err){ pintarEnvio(err.message); }
 }
 
