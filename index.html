@@ -3711,20 +3711,65 @@ async function pedirEtiqueta(){
   }catch(err){ pintarFichaEnvio(err.message); }
 }
 
+/* Chilexpress entrega la etiqueta en binario, que puede ser imagen, PDF o
+   texto para impresora Zebra. Se reconoce por sus primeros bytes. */
+function tipoEtiqueta(arr){
+  const b = arr;
+  if(b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46)
+    return { mime: "application/pdf", ext: "pdf", imagen: false };
+  if(b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47)
+    return { mime: "image/png", ext: "png", imagen: true };
+  if(b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)
+    return { mime: "image/jpeg", ext: "jpg", imagen: true };
+  if(b[0] === 0x42 && b[1] === 0x4d) return { mime: "image/bmp", ext: "bmp", imagen: true };
+  if(b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46)
+    return { mime: "image/gif", ext: "gif", imagen: true };
+  return { mime: "text/plain", ext: "txt", imagen: false };   /* EPL o datos */
+}
+
 function verEtiqueta(){
   const e = A.envios.find(x => x.id === ctx.id);
   if(!e.etiqueta) return;
   if(/^https?:/.test(e.etiqueta)) return window.open(e.etiqueta, "_blank");
   try{
-    const bin = atob(e.etiqueta);
+    const bin = atob(String(e.etiqueta).replace(/\s/g, ""));
     const arr = new Uint8Array(bin.length);
     for(let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
-    const a = document.createElement("a");
-    a.href = url; a.download = "etiqueta-" + (e.ot || e.cliente) + ".pdf";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-  }catch(err){ avisar("No se pudo abrir la etiqueta"); }
+    const t = tipoEtiqueta(arr);
+    const url = URL.createObjectURL(new Blob([arr], { type: t.mime }));
+    ctx.etiquetaURL = url;
+    ctx.etiquetaNombre = "etiqueta-" + (e.ot || e.cliente) + "." + t.ext;
+
+    abrirModal(
+      (t.imagen
+        ? '<img src="' + url + '" style="width:100%;border:1px solid var(--linea);border-radius:10px">'
+        : '<p class="mini" style="margin:0">La etiqueta vino en formato ' +
+          (t.ext === "pdf" ? "PDF" : "de impresora Zebra") + ', así que se descarga para abrirla ' +
+          'con el programa correspondiente.</p>') +
+      '<p class="mini" style="margin:0">Orden ' + esc(e.ot || "") + ' · ' + nf.format(arr.length) +
+      ' bytes</p>' +
+      (t.imagen ? '<button class="btn btn-azul btn-w" data-accion="imprimir-etiqueta">Imprimir</button>' : "") +
+      '<button class="btn btn-linea btn-w" data-accion="bajar-etiqueta">Descargar</button>' +
+      '<button class="btn btn-suave btn-w" data-cerrar="1">Cerrar</button>', "Etiqueta");
+  }catch(err){ avisar("No se pudo leer la etiqueta: " + err.message); }
+}
+
+function bajarEtiqueta(){
+  if(!ctx.etiquetaURL) return;
+  const a = document.createElement("a");
+  a.href = ctx.etiquetaURL; a.download = ctx.etiquetaNombre;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* Abre una ventana con la etiqueta sola, lista para enviar a la impresora. */
+function imprimirEtiqueta(){
+  if(!ctx.etiquetaURL) return;
+  const v = window.open("", "_blank");
+  if(!v) return avisar("Permite las ventanas emergentes para imprimir");
+  v.document.write('<html><head><title>Etiqueta</title><style>' +
+    '@page{margin:8mm}body{margin:0;text-align:center}img{max-width:100%}' +
+    '</style></head><body><img src="' + ctx.etiquetaURL + '" onload="window.print()"></body></html>');
+  v.document.close();
 }
 
 function vistaTareas(){
@@ -6202,6 +6247,8 @@ document.addEventListener("click", async ev => {
   if(a === "seguir-envios") return seguirEnvios(false);
   if(a === "ver-etiqueta") return verEtiqueta();
   if(a === "pedir-etiqueta") return pedirEtiqueta();
+  if(a === "bajar-etiqueta") return bajarEtiqueta();
+  if(a === "imprimir-etiqueta") return imprimirEtiqueta();
   if(a === "envio-entregado") return cerrarEnvio("Entregado");
   if(a === "anular-envio") return cerrarEnvio("Anulado");
   if(a === "csv-tareas") return csvTareas();
