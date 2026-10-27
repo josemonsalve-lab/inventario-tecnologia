@@ -622,6 +622,7 @@ async function sincronizar(silencioso){
         A.zoho.activo = !!(c.zoho_portal && c.zoho_proyecto);
         A.zoho.ultima = c.zoho_ultima_sync || "";
         A.zoho.modo = c.zoho_modo || "traer";
+        A.cxAmbiente = c.cx_ambiente || "prueba";
       }catch(e){}
     }
     if(!A.perfiles.length) A.perfiles = await cargarPerfiles();
@@ -652,7 +653,7 @@ const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
   cotizaciones: [], cot: null, selEq: {}, mantenimientos: [], perfiles: [], tareas: [],
   envios: [], direcciones: [], comunasCX: [],
-  zoho: { activo: false, ultima: "", modo: "traer" },
+  zoho: { activo: false, ultima: "", modo: "traer" }, cxAmbiente: "prueba",
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
   rol: "admin", enLinea: true, ultima: 0, uf: 0, ufFecha: "", ufDia: "", ufFuente: "", ultimoError: "",
@@ -3378,7 +3379,8 @@ const CLASE_ENVIO = { "Preparando": "pt-rev", "En tránsito": "pt-res",
 
 async function llamarCX(cuerpo){
   const r = await fetch(API.base() + "/functions/v1/chilexpress", {
-    method: "POST", headers: API.cabeceras(), body: JSON.stringify(cuerpo || {})
+    method: "POST", headers: API.cabeceras(),
+    body: JSON.stringify(Object.assign({ ambiente: A.cxAmbiente || "prueba" }, cuerpo || {}))
   });
   let j = {};
   try{ j = await r.json(); }catch(e){}
@@ -3642,6 +3644,7 @@ function pintarFichaEnvio(aviso){
     (e.ot ? "" : '<button class="btn btn-azul btn-w" data-accion="emitir-ot">Emitir orden de transporte</button>') +
     (e.ot ? '<button class="btn btn-linea btn-w" data-accion="seguir-uno">Actualizar seguimiento</button>' : "") +
     (e.etiqueta ? '<button class="btn btn-linea btn-w" data-accion="ver-etiqueta">Ver la etiqueta</button>' : "") +
+    (e.ot ? '<button class="btn btn-suave btn-w" data-accion="pedir-etiqueta">Volver a pedir la etiqueta</button>' : "") +
     '<button class="btn btn-linea btn-w" data-accion="editar-envio">Editar los datos</button>' +
     (e.estado !== "Entregado"
       ? '<button class="btn btn-celeste btn-w" data-accion="envio-entregado">Marcar como entregado</button>' : "") +
@@ -3694,6 +3697,18 @@ async function cerrarEnvio(estado){
   avisar(estado === "Entregado"
     ? "Entregado · " + (e.series || []).length + " equipos actualizados"
     : "Envío anulado");
+}
+
+/* Pide a Chilexpress una etiqueta nueva para una orden ya emitida. */
+async function pedirEtiqueta(){
+  const e = A.envios.find(x => x.id === ctx.id);
+  avisar("Pidiendo la etiqueta…");
+  try{
+    const j = await llamarCX({ accion: "etiqueta", id: e.id });
+    await sincronizar(true); pintar();
+    fichaEnvio(e.id);
+    avisar(j.etiqueta ? "Etiqueta renovada" : "Chilexpress no devolvió la etiqueta");
+  }catch(err){ pintarFichaEnvio(err.message); }
 }
 
 function verEtiqueta(){
@@ -5628,6 +5643,8 @@ async function modalCX(aviso, bien){
     '<p class="mini" style="margin:0">Datos del remitente, los mismos para todos los envíos. Las claves ' +
     'de la API van en los Secrets de la función, no acá.</p>' +
     campo("x-cuenta", "Número de cuenta corriente con Chilexpress") +
+    campo("x-email", "Correo de contacto del remitente",
+      "Chilexpress lo exige en las órdenes de transporte.") +
     campo("x-rut", "RUT de la empresa",
       "Sin puntos ni dígito verificador, por ejemplo 77398220. El seguimiento no funciona sin él.") +
     campo("x-origen_nombre", "Comuna de origen") +
@@ -5642,9 +5659,13 @@ async function modalCX(aviso, bien){
       '<label class="f"><span>Teléfono</span><input class="inp" id="x-telefono" value="' +
         esc(cfg.cx_telefono || "") + '"></label></div>' +
     '<label class="f"><span>Ambiente</span><select class="inp" id="x-ambiente">' +
-      opciones(["prueba", "produccion"], cfg.cx_ambiente || "prueba") + '</select></label>' +
+      opciones(["prueba", "produccion"], cfg.cx_ambiente || A.cxAmbiente || "prueba") + '</select></label>' +
+    (cfg.cx_ambiente && cfg.cx_ambiente !== A.cxAmbiente
+      ? '<p class="mini" style="color:var(--rojo);margin:0">Guardado: ' + esc(cfg.cx_ambiente) +
+        ' · en uso: ' + esc(A.cxAmbiente) + '. Pulsa Guardar para dejarlos iguales.</p>' : "") +
     '<p class="mini" style="margin:0">Mientras configuras, deja <i>prueba</i>: usa el ambiente de ensayo ' +
-    'de Chilexpress y no genera envíos reales.</p>' +
+    'de Chilexpress y no genera envíos reales. En ese ambiente se usa la cuenta de ensayo ' +
+    '18578680 que publica Chilexpress, no la tuya.</p>' +
     '<button class="btn btn-celeste btn-w" data-accion="guardar-cx">Guardar</button>' +
     '<button class="btn btn-linea btn-w" data-accion="probar-cx">Probar la conexión</button>',
     "Chilexpress");
@@ -5679,14 +5700,15 @@ async function buscarOrigenCX(){
 }
 
 async function guardarCX(){
-  const claves = ["cuenta", "rut", "origen_nombre", "origen_codigo", "direccion", "contacto",
+  const claves = ["cuenta", "rut", "email", "origen_nombre", "origen_codigo", "direccion", "contacto",
     "telefono", "ambiente"];
   try{
     await API.req("POST", "integraciones?on_conflict=clave",
       claves.map(k => ({ clave: "cx_" + k, valor: val("x-" + k) || "" })),
       "resolution=merge-duplicates,return=minimal");
+    A.cxAmbiente = val("x-ambiente") || "prueba";
     cerrarModal(); pintar();
-    avisar("Datos de Chilexpress guardados");
+    avisar("Datos guardados · ambiente de " + (A.cxAmbiente === "prueba" ? "pruebas" : "producción"));
   }catch(e){ fallo(e, "integraciones"); }
 }
 
@@ -6179,6 +6201,7 @@ document.addEventListener("click", async ev => {
   if(a === "seguir-uno") return seguirEnvios(true);
   if(a === "seguir-envios") return seguirEnvios(false);
   if(a === "ver-etiqueta") return verEtiqueta();
+  if(a === "pedir-etiqueta") return pedirEtiqueta();
   if(a === "envio-entregado") return cerrarEnvio("Entregado");
   if(a === "anular-envio") return cerrarEnvio("Anulado");
   if(a === "csv-tareas") return csvTareas();
