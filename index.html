@@ -3392,7 +3392,7 @@ async function llamarCX(cuerpo){
 function vistaEnvios(){
   const q = A.q.toLowerCase();
   const f = A.filtro === "Todas" ? "Activos" : A.filtro;
-  const chips = '<div class="chips">' + ["Activos", ...EST_ENVIO, "Todos"].map(x =>
+  const chips = '<div class="chips">' + ["Activos", ...EST_ENVIO, "Todos", "Seguimiento"].map(x =>
     '<button class="chip ' + (f === x ? "on" : "") + '" data-sit="' + esc(x) + '">' + x + '</button>').join("") + '</div>';
 
   const todos = A.envios.slice().sort((a, b) =>
@@ -3414,6 +3414,7 @@ function vistaEnvios(){
     (activos.some(e => e.ot) ? '<button class="btn btn-linea btn-w" style="margin-bottom:12px" ' +
       'data-accion="seguir-envios">Actualizar seguimiento de Chilexpress</button>' : "");
 
+  if(f === "Seguimiento") return chips + vistaSeguimiento(todos);
   if(!todos.length) return chips + resumen +
     vacio("Sin envíos", "Registra el despacho de equipos a un cliente y sigue su estado con Chilexpress.",
       "Nuevo envío", "nuevo-envio");
@@ -3434,6 +3435,101 @@ function vistaEnvios(){
 
 /* Chilexpress entrega los eventos del más reciente al más antiguo. */
 const eventosCX = e => ((e.seguimiento || {}).trackingEvents || []);
+/* "hace 3 h", "ayer", "hace 2 días": para saber si el dato está fresco. */
+function haceCuanto(cuando){
+  const m = Math.round((Date.now() - new Date(cuando).getTime()) / 60000);
+  if(m < 2) return "recién";
+  if(m < 60) return "hace " + m + " min";
+  const hrs = Math.round(m / 60);
+  if(hrs < 24) return "hace " + hrs + (hrs === 1 ? " hora" : " horas");
+  const d = Math.round(hrs / 24);
+  return d === 1 ? "ayer" : "hace " + d + " días";
+}
+
+/* Panel de seguimiento: todas las órdenes con su último movimiento. */
+function vistaSeguimiento(todos){
+  const conOT = todos.filter(e => e.ot);
+  const buscador =
+    '<div class="f2" style="margin-bottom:12px">' +
+      '<label class="f"><span>Consultar una orden cualquiera</span>' +
+      '<input class="inp" id="s-ot" placeholder="712678916644"></label>' +
+      '<button class="btn btn-linea btn-w" style="align-self:end" data-accion="consultar-ot">Consultar</button>' +
+    '</div>';
+
+  if(!conOT.length) return buscador +
+    '<p class="mini">Todavía no hay envíos con orden de transporte emitida. ' +
+    'Puedes consultar igual cualquier número de orden de Chilexpress con el buscador de arriba.</p>';
+
+  const viejo = e => {
+    if(!e.revisado) return true;
+    return (Date.now() - new Date(e.revisado).getTime()) > 6 * 3600 * 1000;
+  };
+
+  return buscador +
+    '<button class="btn btn-azul btn-w" style="margin-bottom:12px" data-accion="seguir-envios">' +
+    'Actualizar las ' + conOT.filter(e => e.estado !== "Entregado").length + ' órdenes activas</button>' +
+    '<div class="lista">' + conOT.map(e => {
+      const ev = eventosCX(e);
+      const u = ev[0] || {};
+      return '<button class="fila" data-envio="' + e.id + '"><div class="t">' +
+        '<b>' + esc(e.ot) + ' · ' + esc(e.cliente) + '</b>' +
+        '<span>' + (e.series || []).length + (e.series.length === 1 ? " equipo" : " equipos") +
+          (e.comuna ? " · " + esc(e.comuna) : "") + (e.servicio ? " · " + esc(e.servicio) : "") + '</span>' +
+        (u.description
+          ? '<span class="detalle"><b>' + esc(u.description) + '</b> · ' + esc(fechaEventoCX(u)) +
+            (u.location ? " · " + esc(u.location) : "") + '</span>'
+          : '<span class="mini">Sin movimientos registrados todavía</span>') +
+        (e.revisado
+          ? '<span class="mini"' + (viejo(e) ? ' style="color:#a76a00"' : "") + '>Consultado ' +
+            esc(haceCuanto(e.revisado)) + '</span>'
+          : '<span class="mini" style="color:#a76a00">Nunca consultado</span>') +
+        '</div><span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></button>';
+    }).join("") + '</div>';
+}
+
+/* Consulta una orden por su número, esté o no registrada en la app. */
+async function consultarOT(){
+  const ot = (val("s-ot") || "").replace(/[^0-9]/g, "");
+  if(!ot) return avisar("Escribe el número de la orden");
+  avisar("Consultando a Chilexpress…");
+  try{
+    const j = await llamarCX({ accion: "consultar", ot: ot });
+    const d = j.datos || {};
+    const ev = d.trackingEvents || [];
+    const t = d.transportOrderData || {};
+    const ent = d.deliveryData || {};
+    const dir = d.addressData || {};
+    abrirModal(
+      '<div class="fila" style="display:block"><table class="specs">' +
+        '<tr><td>Orden</td><td>' + esc(ot) + '</td></tr>' +
+        (t.status ? '<tr><td>Estado</td><td>' + esc(t.status) +
+          (t.locationStatus ? " · " + esc(t.locationStatus) : "") + '</td></tr>' : "") +
+        (t.serviceDescriptionFull || t.service
+          ? '<tr><td>Servicio</td><td>' + esc(t.serviceDescriptionFull || t.service) + '</td></tr>' : "") +
+        (t.reference ? '<tr><td>Referencia</td><td>' + esc(t.reference) + '</td></tr>' : "") +
+        (t.weight ? '<tr><td>Peso</td><td>' + esc(t.weight) + ' kg</td></tr>' : "") +
+        (dir.address ? '<tr><td>Destino</td><td>' + esc(dir.address) + '</td></tr>' : "") +
+      '</table></div>' +
+      (ent.receptorName
+        ? '<p class="aviso" style="background:#eef6dd;color:var(--lima-texto)">Recibió ' +
+          esc(ent.receptorName) + (ent.deliveryDate ? " el " + esc(ent.deliveryDate) +
+          " a las " + esc(ent.deliveryHour || "") : "") + '</p>' : "") +
+      (ev.length
+        ? '<div class="sec">Movimientos</div><div class="lista">' + ev.map(x =>
+          '<div class="fila"><div class="t"><b>' + esc(x.description || "") + '</b>' +
+          '<span>' + esc(fechaEventoCX(x)) + (x.location ? " · " + esc(x.location) : "") + '</span>' +
+          (x.motive ? '<span>' + esc(x.motive) + '</span>' : "") + '</div>' +
+          (x.certificadoEntrega ? '<a class="btn btn-linea btn-sm" target="_blank" href="' +
+            esc(x.certificadoEntrega) + '">Certificado</a>' : "") + '</div>').join("") + '</div>'
+        : '<p class="mini">Esa orden todavía no registra movimientos.</p>') +
+      '<button class="btn btn-suave btn-w" data-cerrar="1">Cerrar</button>',
+      "Orden " + ot);
+  }catch(err){
+    A.ultimoError = "Chilexpress: " + err.message; A.sinGuardar = true; pintar();
+    avisar("No se pudo consultar. Revisa el aviso rojo.");
+  }
+}
+
 function ultimoEstadoCX(e){
   const u = eventosCX(e)[0] || {};
   const d = (e.seguimiento || {}).transportOrderData || {};
@@ -6245,6 +6341,7 @@ document.addEventListener("click", async ev => {
   if(a === "emitir-ot") return emitirOT();
   if(a === "seguir-uno") return seguirEnvios(true);
   if(a === "seguir-envios") return seguirEnvios(false);
+  if(a === "consultar-ot") return consultarOT();
   if(a === "ver-etiqueta") return verEtiqueta();
   if(a === "pedir-etiqueta") return pedirEtiqueta();
   if(a === "bajar-etiqueta") return bajarEtiqueta();
