@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a5c85">
+<meta name="theme-color" content="#1e5591">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Inventario de equipos</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -12,11 +12,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
 :root{
-  /* colores tomados del logo: celeste #00BAFF y lima #BEDA69 */
-  --azul:#0a5c85; --celeste:#00baff; --cielo:#d4f1ff; --lima:#beda69;
-  --lima-soft:#eef6d9; --lima-texto:#4e6a16;
-  --rojo:#c0392b; --rojo-soft:#fdecea; --n700:#2c3e4a; --n500:#68808d;
-  --linea:#e2ecf2; --fondo:#f5fafd;
+  /* Paleta oficial Rex+, tomada del sistema de diseño del sitio:
+     azul Visma, celeste de acción, verde lima del "+" del logo y
+     neutros puros, sin tinte azul. */
+  --azul:#1e5591; --celeste:#00b4ff; --cielo:#b2e5ff; --lima:#b7d367;
+  --cielo-suave:#e8f7ff;              /* bandas amplias, más claras que la del sitio */
+  --lima-soft:#f1f6e3; --lima-texto:#4e6a16;
+  --rojo:#cc3366; --rojo-soft:#fbeaf0;
+  --ambar:#f2b544; --ambar-soft:#fdf3e0; --ambar-texto:#8a5a00;
+  --n700:#333333; --n500:#666666;
+  --linea:#e4e4e4; --fondo:#f7f9fb;
   --font:'Red Hat Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -54,7 +59,7 @@ header{background:#fff;border-bottom:1px solid var(--linea);position:sticky;top:
 @media(min-width:620px){.grid{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:860px){.grid{grid-template-columns:repeat(4,1fr)}}
 .card{background:#fff;border:1px solid var(--linea);border-radius:15px;overflow:hidden;display:flex;flex-direction:column;text-align:left;width:100%}
-.foto{aspect-ratio:4/3;background:#eef3f8;position:relative;display:flex;align-items:center;justify-content:center;color:#b9c6d3}
+.foto{aspect-ratio:4/3;background:var(--fondo);position:relative;display:flex;align-items:center;justify-content:center;color:var(--n500)}
 .foto img{width:100%;height:100%;object-fit:cover;display:block}
 .card .b{padding:10px;display:flex;flex-direction:column;gap:3px;flex:1}
 .card .n{font-weight:700;color:var(--azul);line-height:1.2;font-size:14px}
@@ -74,8 +79,8 @@ header{background:#fff;border-bottom:1px solid var(--linea);position:sticky;top:
   margin-top:3px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical}
 .pt{font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px;white-space:nowrap}
 .pt-disp{background:var(--lima-soft);color:var(--lima-texto)}
-.pt-ent{background:#eef1f5;color:var(--n500)}
-.pt-rev{background:#fff4e0;color:#a76a00}
+.pt-ent{background:var(--linea);color:var(--n500)}
+.pt-rev{background:var(--ambar-soft);color:var(--ambar-texto)}
 .pt-res{background:var(--cielo);color:var(--azul)}
 .pt-baja{background:var(--rojo-soft);color:var(--rojo)}
 
@@ -117,11 +122,11 @@ label.f>span{display:block;font-size:13px;font-weight:700;color:var(--azul);marg
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));background:var(--azul);color:#fff;padding:10px 20px;border-radius:100px;font-weight:700;z-index:70;font-size:14px}
 .sec{font-size:13px;font-weight:900;color:var(--azul);margin:18px 0 8px}
 .mini{font-size:12px;color:var(--n500)}
-.thumb{width:110px;height:110px;border-radius:15px;background:#eef3f8;border:1px solid var(--linea);overflow:hidden;display:flex;align-items:center;justify-content:center;color:#b9c6d3;flex-shrink:0}
+.thumb{width:110px;height:110px;border-radius:15px;background:var(--fondo);border:1px solid var(--linea);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--n500);flex-shrink:0}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .pastilla{display:inline-block;background:var(--cielo);color:var(--azul);border-radius:100px;padding:3px 10px;font-size:12px;font-weight:700}
 /* galeria */
-.galeria{width:100%;aspect-ratio:4/3;border-radius:15px;overflow:hidden;background:#eef3f8;display:flex;align-items:center;justify-content:center;color:#b9c6d3;padding:6px}
+.galeria{width:100%;aspect-ratio:4/3;border-radius:15px;overflow:hidden;background:var(--fondo);display:flex;align-items:center;justify-content:center;color:var(--n500);padding:6px}
 /* la foto se muestra completa dentro del marco, sin recortar */
 .galeria img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:10px}
 .tiras{display:flex;gap:8px;flex-wrap:wrap}
@@ -129,13 +134,13 @@ label.f>span{display:block;font-size:13px;font-weight:700;color:var(--azul);marg
 .tira.on{border-color:var(--celeste)}
 .tira img{width:100%;height:100%;object-fit:cover}
 .tira .x{position:absolute;top:-1px;right:-1px;background:var(--rojo);color:#fff;width:20px;height:20px;border-radius:0 8px 0 8px;font-size:12px;line-height:20px;text-align:center;font-weight:700}
-.marca{width:20px;height:20px;flex-shrink:0;border-radius:6px;border:2px solid #86b8d2;background:#eef6fb;
+.marca{width:20px;height:20px;flex-shrink:0;border-radius:6px;border:2px solid #86b8d2;background:var(--fondo);
   display:flex;align-items:center;justify-content:center;transition:background .12s,border-color .12s}
 .marca:active{background:#d7ecf7}
 .marca.on{background:var(--celeste);border-color:var(--celeste);box-shadow:0 0 0 3px rgba(0,186,255,.2)}
-.fila.sel{background:#e9f7ff;border-color:var(--celeste)}
-.mini-foto{width:46px;height:46px;border-radius:10px;overflow:hidden;background:#eef3f8;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;color:#b9c6d3;position:relative}
+.fila.sel{background:var(--cielo-suave);border-color:var(--celeste)}
+.mini-foto{width:46px;height:46px;border-radius:10px;overflow:hidden;background:var(--fondo);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;color:var(--n500);position:relative}
 .mini-foto img{width:100%;height:100%;object-fit:cover}
 .heredada{opacity:.92}
 .tira.mas{display:flex;align-items:center;justify-content:center;border-style:dashed;color:var(--azul);font-size:24px;font-weight:700;background:#fff}
@@ -146,13 +151,13 @@ label.f>span{display:block;font-size:13px;font-weight:700;color:var(--azul);marg
 .specs td:last-child{font-weight:700;color:var(--n700);text-align:right}
 .fchips{display:flex;flex-wrap:wrap;gap:6px}
 .fchip{font-size:12px;font-weight:700;padding:4px 11px;border-radius:100px;background:var(--lima-soft);color:var(--lima-texto)}
-.fchip.op{background:#fff4e0;color:#a76a00}
-.fchip.no{background:#f1f3f5;color:#8a8a8a}
+.fchip.op{background:var(--ambar-soft);color:var(--ambar-texto)}
+.fchip.no{background:var(--linea);color:#8a8a8a}
 .clip{display:inline-block;background:var(--cielo);color:var(--azul);border-radius:5px;padding:1px 6px;font-size:10px;vertical-align:middle}
 details summary::-webkit-details-marker{display:none}
 .sinc{font-size:11px;font-weight:700;color:var(--lima-texto);background:var(--lima-soft);padding:4px 10px;border-radius:100px;white-space:nowrap}
 .sinc.off{color:var(--rojo);background:var(--rojo-soft)}
-.sinc.local{color:var(--n500);background:#f1f3f5}
+.sinc.local{color:var(--n500);background:var(--linea)}
 .login{position:fixed;inset:0;z-index:100;background:var(--azul);display:flex;align-items:center;justify-content:center;padding:22px}
 .tarjeta-login{background:#fff;border-radius:20px;padding:26px 22px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:13px}
 .tarjeta-login h2{margin:0;font-size:19px;font-weight:900;color:var(--azul)}
@@ -191,14 +196,14 @@ details summary::-webkit-details-marker{display:none}
 .previa-banda img{height:26px;background:#fff;border-radius:6px;padding:4px 6px}
 .previa-banda b{display:block;font-size:14px}
 .previa-banda span{font-size:11px;opacity:.85}
-.previa-res{display:flex;gap:14px;flex-wrap:wrap;background:#f8fbfd;padding:10px 14px;border-bottom:1px solid var(--linea)}
+.previa-res{display:flex;gap:14px;flex-wrap:wrap;background:var(--fondo);padding:10px 14px;border-bottom:1px solid var(--linea)}
 .previa-res span{display:block;font-size:9px;color:var(--n500);letter-spacing:.03em}
 .previa-res b{font-size:14px;color:var(--azul)}
 .previa-scroll{overflow-x:auto;padding:0 2px}
 .previa-tabla{border-collapse:collapse;width:100%;font-size:11px}
 .previa-tabla th{background:var(--linea);color:var(--azul);text-align:left;padding:5px 6px;white-space:nowrap;font-size:9.5px}
 .previa-tabla td{padding:5px 6px;border-bottom:1px solid var(--linea);white-space:nowrap}
-.previa-tabla tr:nth-child(even) td{background:#fafcfe}
+.previa-tabla tr:nth-child(even) td{background:var(--fondo)}
 .previa-tabla.vertical td{white-space:normal}
 .previa-tabla.vertical td:first-child{color:var(--n500);width:45%}
 .previa-tabla.vertical td:last-child{text-align:right}
@@ -1606,10 +1611,10 @@ function vistaCotizador(){
     '<div class="inp" style="background:var(--fondo);font-weight:700">' + folio(c) + '</div></div></div>' +
     (function(){
       const vieja = !!c.id && A.uf && Math.abs(Number(c.uf) - A.uf) > 0.009;
-      return '<div class="fila" style="margin-top:10px;background:' + (vieja ? "#fff4e0" : "var(--fondo)") + '"><div class="t">' +
+      return '<div class="fila" style="margin-top:10px;background:' + (vieja ? "var(--ambar-soft)" : "var(--fondo)") + '"><div class="t">' +
         '<b>1 UF = ' + clpUF(c.uf) + '</b><span>' +
         (vieja
-          ? '<span style="color:#a76a00">Valor con el que se emitió esta cotización. Hoy la UF está en ' +
+          ? '<span style="color:var(--ambar-texto)">Valor con el que se emitió esta cotización. Hoy la UF está en ' +
             clpUF(A.uf) + '.</span>'
           : (A.ufDia === hoy() && A.ufFuente ? "Valor del " + fechaCorta(A.ufFecha) + " según " + esc(A.ufFuente)
             : A.ufFecha ? '<span style="color:var(--rojo)">Valor del ' + fechaCorta(A.ufFecha) +
@@ -1636,7 +1641,7 @@ function vistaCotizador(){
         (c.enviar && x.env ? '<span>Envío: ' + uf2(x.env) + ' UF</span>' : "") +
         (!x.neto ? '<span style="color:var(--rojo)">Sin precio: escríbelo en la línea</span>' : "") +
         (disp < x.l.cant ? '<span style="color:var(--rojo)">Solo ' + disp + ' disponibles hoy</span>' : "") +
-        (x.sinTarifa && c.enviar ? '<span style="color:#a76a00">' +
+        (x.sinTarifa && c.enviar ? '<span style="color:var(--ambar-texto)">' +
           ((modelo(x.l.codigo) || {}).tarifaDe === ENVIO_MANUAL
             ? "Equipo voluminoso: escribe el envío en esta línea"
             : "Sin tarifa de envío a " + esc(x.destino)) + '</span>' : "") + '</div>' +
@@ -2243,7 +2248,8 @@ async function cabeceraRex(doc, W, titulo, der1, der2){
   if(l64){
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(12, 6, 44, 18, 2.5, 2.5, "F");
-    try{ doc.addImage(l64, "PNG", 15, 9.5, 38, 11); }catch(e){}
+    /* el logo mide 500 × 192, proporción 2,6: hay que respetarla */
+    try{ doc.addImage(l64, "PNG", 15, 9.5, 29.9, 11.5); }catch(e){}
   } else {
     doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(18);
     doc.text("Rex+", 16, 19);
@@ -2418,7 +2424,7 @@ function porcentaje(parte, total){
   return Math.round(p);
 }
 
-const COLORES_PANEL = ["#00baff", "#beda69", "#0a5c85", "#f0a830", "#c0392b", "#8e7cc3", "#9aa7b1"];
+const COLORES_PANEL = ["#00b4ff", "#b7d367", "#1e5591", "#f2b544", "#cc3366", "#8e7cc3", "#9a9a9a"];
 
 /* Dona en SVG: cada porción es un trazo sobre la misma circunferencia. */
 function dona(items, centro, subcentro){
@@ -2443,11 +2449,11 @@ function dona(items, centro, subcentro){
   }).join("");
   return '<div class="dona">' +
     '<svg viewBox="0 0 140 140" width="140" height="140">' +
-      '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="#e4ebf1" stroke-width="' + GROSOR + '"></circle>' +
+      '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="var(--linea)" stroke-width="' + GROSOR + '"></circle>' +
       arcos +
       '<text x="70" y="' + (subcentro ? 68 : 76) + '" text-anchor="middle" font-size="23" font-weight="700" ' +
-        'fill="#0a5c85" font-family="inherit">' + esc(centro) + '</text>' +
-      (subcentro ? '<text x="70" y="86" text-anchor="middle" font-size="9.5" fill="#68808d">' +
+        'fill="var(--azul)" font-family="inherit">' + esc(centro) + '</text>' +
+      (subcentro ? '<text x="70" y="86" text-anchor="middle" font-size="9.5" fill="var(--n500)">' +
         esc(subcentro) + '</text>' : "") +
     '</svg>' +
     '<div class="dona-leyenda">' + items.filter(x => x.valor > 0).map(x => {
@@ -2502,8 +2508,8 @@ function panelVendedor(){
     tarjetaPanel("Disponibles por categoría",
       dona(cats, nf.format(disp), "disponibles"), { vista: "stock" }) +
     tarjetaPanel("Modelos con stock",
-      dona([{ nombre: "Con stock", valor: conStock, color: "#beda69", ir: { vista: "dispo" } },
-            { nombre: "Agotados", valor: sinStock, color: "#c0392b", ir: { vista: "stock" } }],
+      dona([{ nombre: "Con stock", valor: conStock, color: "#b7d367", ir: { vista: "dispo" } },
+            { nombre: "Agotados", valor: sinStock, color: "#cc3366", ir: { vista: "stock" } }],
            porcentaje(conStock, ms.length) + "%", "del catálogo"),
       { vista: "dispo" }) +
     tarjetaPanel("Modelos con más disponibles", dona(top, nf.format(disp), "equipos"),
@@ -2552,21 +2558,48 @@ function desdePanel(){
   return "";
 }
 
-/* Minigráfico de tendencia: una línea simple sobre doce meses. */
-function tendencia(valores, color){
-  const max = Math.max(...valores, 1), an = 150, al = 34;
-  const paso = valores.length > 1 ? an / (valores.length - 1) : an;
-  const pts = valores.map((v, i) => (i * paso).toFixed(1) + "," + (al - 2 - (v / max) * (al - 6)).toFixed(1));
-  return '<svg viewBox="0 0 ' + an + ' ' + al + '" width="100%" height="' + al + '" preserveAspectRatio="none">' +
+/* Minigráfico de tendencia de los últimos doce meses, con su escala a la
+   vista: el máximo y el cero a la izquierda, el primer y el último mes abajo. */
+function tendencia(valores, color, etiquetas){
+  const an = 170, al = 58, izq = 20, aba = 11, arr = 4;
+  const max = Math.max(...valores, 1);
+  const { tope } = escalaEje(max);
+  const altoUtil = al - arr - aba;
+  const paso = valores.length > 1 ? (an - izq - 3) / (valores.length - 1) : (an - izq);
+  const y = v => arr + altoUtil - (v / tope) * altoUtil;
+  const x = i => izq + i * paso;
+
+  const pts = valores.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1));
+  const ultimo = valores[valores.length - 1] || 0;
+  const ini = (etiquetas && etiquetas[0]) ? etiquetas[0] : "";
+  const fin = (etiquetas && etiquetas[etiquetas.length - 1]) ? etiquetas[etiquetas.length - 1] : "";
+
+  return '<svg viewBox="0 0 ' + an + ' ' + al + '" width="100%" style="display:block">' +
+    /* guías y valores del eje vertical */
+    '<line x1="' + izq + '" y1="' + y(tope) + '" x2="' + an + '" y2="' + y(tope) +
+      '" stroke="var(--linea)" stroke-width="1"></line>' +
+    '<line x1="' + izq + '" y1="' + y(0) + '" x2="' + an + '" y2="' + y(0) +
+      '" stroke="var(--linea)" stroke-width="1"></line>' +
+    '<text x="' + (izq - 3) + '" y="' + (y(tope) + 3) + '" text-anchor="end" font-size="7.5" ' +
+      'fill="var(--n500)">' + nf.format(tope) + '</text>' +
+    '<text x="' + (izq - 3) + '" y="' + (y(0) + 3) + '" text-anchor="end" font-size="7.5" ' +
+      'fill="var(--n500)">0</text>' +
     '<polyline fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" ' +
-    'stroke-linecap="round" points="' + pts.join(" ") + '"></polyline></svg>';
+      'stroke-linecap="round" points="' + pts.join(" ") + '"></polyline>' +
+    /* el último punto, que es el valor de hoy */
+    '<circle cx="' + x(valores.length - 1).toFixed(1) + '" cy="' + y(ultimo).toFixed(1) +
+      '" r="2.6" fill="' + color + '"></circle>' +
+    /* meses a los extremos del eje horizontal */
+    '<text x="' + izq + '" y="' + (al - 2) + '" font-size="7.5" fill="var(--n500)">' + esc(ini) + '</text>' +
+    '<text x="' + an + '" y="' + (al - 2) + '" text-anchor="end" font-size="7.5" fill="var(--n500)">' +
+      esc(fin) + '</text></svg>';
 }
 
-function tarjetaKPI(titulo, valor, valores, color, ir){
+function tarjetaKPI(titulo, valor, valores, color, ir, etiquetas){
   return '<div class="kpi"' + (ir ? " " + atributosIr(ir) : "") + '>' +
     '<span class="kpi-t">' + esc(titulo) + '</span>' +
     '<b class="kpi-v">' + esc(valor) + '</b>' +
-    tendencia(valores, color || "#0a5c85") + '</div>';
+    tendencia(valores, color || "#1e5591", etiquetas) + '</div>';
 }
 
 function vistaPanelArea(grupo){
@@ -2601,6 +2634,19 @@ function vistaPanelArea(grupo){
   const tallerMes = serie(A.mantenimientos || [], "fechaIngreso");
   const entregasMes = serie(A.unidades, "entrega");
 
+  const etiquetasMes = meses.map(m => m.etiqueta);
+
+  /* días promedio de cierre mes a mes, para que la tarjeta muestre su propia
+     tendencia y no la de los cierres */
+  const diasMes = meses.map(m => {
+    const ds = suyas.filter(t => !pendiente(t) && String(t.cerrada || "").slice(0, 7) === m.k)
+      .map(t => {
+        const a = String(t.creada || "").slice(0, 10), b = String(t.cerrada || "").slice(0, 10);
+        return (a && b) ? Math.max(0, Math.round((new Date(b) - new Date(a)) / 86400000)) : null;
+      }).filter(x => x !== null);
+    return ds.length ? Math.round(ds.reduce((a, b) => a + b, 0) / ds.length) : 0;
+  });
+
   const barrasDobles = meses.map((m, i) => ({ etiqueta: m.etiqueta, hechas: cerradasMes[i],
     pend: Math.max(0, creadasMes[i] - cerradasMes[i]), total: creadasMes[i] }));
   const barrasTaller = meses.map((m, i) => ({ etiqueta: m.etiqueta, hechas: tallerMes[i], pend: 0,
@@ -2619,23 +2665,24 @@ function vistaPanelArea(grupo){
   const personas = Object.values(porP).sort((a, b) => b.total - a.total).slice(0, 8);
 
   return '<div class="kpis">' +
-      tarjetaKPI("Tareas cerradas", nf.format(cerradas.length), cerradasMes, "#beda69",
-        { vista: "tareas", chip: "Hechas" }) +
-      tarjetaKPI("Pendientes", nf.format(pend.length), creadasMes, "#00baff",
-        { vista: "tareas", chip: "Pendientes" }) +
-      tarjetaKPI("Días promedio de cierre", prom ? prom.toFixed(1) : "—", cerradasMes, "#0a5c85") +
-      tarjetaKPI("Equipos al taller", nf.format(mant.length), tallerMes, "#f0a830",
-        { vista: "taller" }) +
+      tarjetaKPI("Tareas cerradas", nf.format(cerradas.length), cerradasMes, "#b7d367",
+        { vista: "tareas", chip: "Hechas" }, etiquetasMes) +
+      tarjetaKPI("Pendientes", nf.format(pend.length), creadasMes, "#00b4ff",
+        { vista: "tareas", chip: "Pendientes" }, etiquetasMes) +
+      tarjetaKPI("Días promedio de cierre", prom ? prom.toFixed(1) : "—", diasMes, "#1e5591",
+        null, etiquetasMes) +
+      tarjetaKPI("Equipos al taller", nf.format(mant.length), tallerMes, "#f2b544",
+        { vista: "taller" }, etiquetasMes) +
     '</div>' +
 
     (venc.length ? '<p class="aviso" style="margin:0 0 12px">' + venc.length +
       (venc.length === 1 ? " tarea vencida" : " tareas vencidas") + ' en el área.</p>' : "") +
 
     tarjetaPanel("Trabajo por persona", barrasH(personas), { vista: "tareas", chip: "Por persona" }) +
-    tarjetaPanel("Tareas por mes · creadas y cerradas", barrasEje(barrasDobles, { linea: true }),
+    tarjetaPanel("Tareas por mes · creadas y cerradas", barrasMes(barrasDobles),
       { vista: "tareas", chip: "Estadísticas" }) +
-    tarjetaPanel("Ingresos al taller por mes", barrasEje(barrasTaller), { vista: "taller" }) +
-    tarjetaPanel("Equipos entregados por mes", barrasEje(barrasEntregas), { vista: "equipos" }) +
+    tarjetaPanel("Ingresos al taller por mes", barrasMes(barrasTaller), { vista: "taller" }) +
+    tarjetaPanel("Equipos entregados por mes", barrasMes(barrasEntregas), { vista: "equipos" }) +
     (costo ? '<p class="mini" style="margin:0">Costo de reparaciones en el período: ' +
       clp(costo) + '.</p>' : "");
 }
@@ -2680,12 +2727,12 @@ function vistaPanel(){
   const pend = ts.length - hechas;
   const venc = ts.filter(vencida).length;
   const porEstadoT = [
-    { nombre: "Cerradas", valor: hechas, color: "#beda69", ir: { vista: "tareas", chip: "Hechas" } },
-    { nombre: "Pendientes al día", valor: pend - venc, color: "#00baff", ir: { vista: "tareas", chip: "Pendientes" } },
-    { nombre: "Vencidas", valor: venc, color: "#c0392b", ir: { vista: "tareas", chip: "Vencidas" } }];
+    { nombre: "Cerradas", valor: hechas, color: "#b7d367", ir: { vista: "tareas", chip: "Hechas" } },
+    { nombre: "Pendientes al día", valor: pend - venc, color: "#00b4ff", ir: { vista: "tareas", chip: "Pendientes" } },
+    { nombre: "Vencidas", valor: venc, color: "#cc3366", ir: { vista: "tareas", chip: "Vencidas" } }];
   const porPrio = PRIORIDADES.map((p, i) => ({ nombre: p,
     valor: ts.filter(t => pendiente(t) && (t.prioridad || "Normal") === p).length,
-    color: ["#c0392b", "#00baff", "#9aa7b1"][i], ir: { vista: "tareas", chip: "Pendientes" } }));
+    color: ["#cc3366", "#00b4ff", "#9a9a9a"][i], ir: { vista: "tareas", chip: "Pendientes" } }));
 
   /* proveedores: cuántos equipos vinieron de cada uno y cuánto se invirtió */
   const porProv = A.proveedores.map((p, i) => {
@@ -2704,7 +2751,7 @@ function vistaPanel(){
   if(porProv.length > 6)
     donaProv.push({ nombre: "Otros " + (porProv.length - 6), color: COLORES_PANEL[6],
       valor: porProv.slice(6).reduce((a, x) => a + x.valor, 0), ir: { vista: "proveedores" } });
-  if(sinProv) donaProv.push({ nombre: "Sin proveedor", valor: sinProv, color: "#cbd5dd",
+  if(sinProv) donaProv.push({ nombre: "Sin proveedor", valor: sinProv, color: "#d8d8d8",
     ir: { vista: "equipos" } });
 
   /* taller */
@@ -2953,8 +3000,8 @@ function pintarNuevoTaller(){
             ((m && fotosDe(m)[0]) ? '<img src="' + fotosDe(m)[0] + '" alt="">' : ICONO_EQUIPO) + '</span>' +
             '<div class="t"><b>' + esc(m ? (m.nombre || m.modelo || u.codigo) : u.codigo) + '</b><span>' +
             esc(u.codigo) + " · " + esc(u.situacion) + (u.cliente ? " · " + esc(u.cliente) : "") + '</span></div></div>'
-          : '<div class="fila" style="display:block;background:#fff4e0"><div class="t">' +
-            '<b style="color:#a76a00">Equipo externo</b><span style="color:#a76a00">Esa serie no está en el ' +
+          : '<div class="fila" style="display:block;background:var(--ambar-soft)"><div class="t">' +
+            '<b style="color:var(--ambar-texto)">Equipo externo</b><span style="color:var(--ambar-texto)">Esa serie no está en el ' +
             'inventario. Se puede atender igual; el registro queda sin vínculo con el stock.</span></div></div>' +
             '<div class="f2"><label class="f"><span>Modelo (opcional)</span>' +
             '<select class="inp" id="t-codigo"><option value="">Sin especificar</option>' +
@@ -3055,7 +3102,7 @@ function pintarTaller(){
       (m.fechaIngreso ? " · ingresó " + fechaCorta(m.fechaIngreso) : "") +
       (d !== null ? " · " + d + (d === 1 ? " día" : " días") : "") + '</span>' +
       ((u && u.cliente) || m.cliente ? '<span>Cliente: ' + esc((u && u.cliente) || m.cliente) + '</span>' : "") +
-      (u ? "" : '<span style="color:#a76a00">Equipo externo, no está en el inventario</span>') + '</div>' +
+      (u ? "" : '<span style="color:var(--ambar-texto)">Equipo externo, no está en el inventario</span>') + '</div>' +
       '<span class="pt ' + (CLASE_TALLER[m.estado] || "pt-ent") + '">' + esc(m.estado) + '</span></div>' +
 
     '<div><span style="display:block;font-size:13px;font-weight:700;color:var(--azul);margin-bottom:6px">Fotos</span>' +
@@ -3319,7 +3366,7 @@ function barrasEje(meses, opciones){
     ejes += '<line x1="' + izq + '" y1="' + yy + '" x2="' + (An - der) + '" y2="' + yy +
       '" stroke="var(--linea)" stroke-width="1"></line>' +
       '<text x="' + (izq - 5) + '" y="' + (Number(yy) + 3.5).toFixed(1) +
-      '" text-anchor="end" font-size="8.5" fill="#68808d">' + nf.format(v) + '</text>';
+      '" text-anchor="end" font-size="8.5" fill="var(--n500)">' + nf.format(v) + '</text>';
   }
 
   meses.forEach((m, i) => {
@@ -3334,14 +3381,14 @@ function barrasEje(meses, opciones){
         '" width="' + anchoBarra.toFixed(1) + '" height="' + Math.max(y(0) - yh, 1).toFixed(1) +
         '" fill="var(--lima)" rx="2"></rect>';
       barras += '<text x="' + cx.toFixed(1) + '" y="' + (yt - 3).toFixed(1) +
-        '" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a5c85">' +
+        '" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--azul)">' +
         nf.format(m.total) + '</text>';
     }
     /* con muchos meses las etiquetas no caben: se muestra una de cada dos,
        y siempre la última para no perder la referencia del final */
     const saltar = meses.length > 8 && (meses.length - 1 - i) % 2 !== 0;
     if(!saltar) etiquetas += '<text x="' + cx.toFixed(1) + '" y="' + (Al - 8) +
-      '" text-anchor="middle" font-size="8" fill="#68808d">' + esc(m.etiqueta) + '</text>';
+      '" text-anchor="middle" font-size="8" fill="var(--n500)">' + esc(m.etiqueta) + '</text>';
   });
 
   /* línea de tendencia opcional, como en los tableros */
@@ -3356,7 +3403,7 @@ function barrasEje(meses, opciones){
   return '<svg viewBox="0 0 ' + An + ' ' + Al + '" width="100%" style="display:block">' +
     ejes +
     '<line x1="' + izq + '" y1="' + y(0) + '" x2="' + (An - der) + '" y2="' + y(0) +
-      '" stroke="#b9c6d3" stroke-width="1.2"></line>' +
+      '" stroke="var(--n500)" stroke-width="1.2"></line>' +
     barras + linea + etiquetas + '</svg>';
 }
 
@@ -3427,7 +3474,7 @@ function vistaEstadisticas(ts){
       'background:var(--celeste);border-radius:2px"></i> pendientes   ' +
       '<i style="display:inline-block;width:9px;height:9px;background:var(--lima);border-radius:2px"></i> cerradas</p>' +
     '<div class="sec">Por persona</div>' + barrasH(personas) +
-    '<div class="sec">Por mes</div>' + barrasEje(meses) +
+    '<div class="sec">Por mes</div>' + barrasMes(meses) +
     '<button class="btn btn-linea btn-w" style="margin-top:14px" data-accion="csv-tareas">' +
       'Exportar estas ' + nf.format(ts.length) + ' tareas a CSV</button>';
 }
@@ -3721,9 +3768,9 @@ function vistaSeguimiento(todos){
             (u.location ? " · " + esc(u.location) : "") + '</span>'
           : '<span class="mini">Sin movimientos registrados todavía</span>') +
         (e.revisado
-          ? '<span class="mini"' + (viejo(e) ? ' style="color:#a76a00"' : "") + '>Consultado ' +
+          ? '<span class="mini"' + (viejo(e) ? ' style="color:var(--ambar-texto)"' : "") + '>Consultado ' +
             esc(haceCuanto(e.revisado)) + '</span>'
-          : '<span class="mini" style="color:#a76a00">Nunca consultado</span>') +
+          : '<span class="mini" style="color:var(--ambar-texto)">Nunca consultado</span>') +
         '</div><span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></button>';
     }).join("") + '</div>';
 }
@@ -3752,7 +3799,7 @@ async function consultarOT(){
         (dir.address ? '<tr><td>Destino</td><td>' + esc(dir.address) + '</td></tr>' : "") +
       '</table></div>' +
       (ent.receptorName
-        ? '<p class="aviso" style="background:#eef6dd;color:var(--lima-texto)">Recibió ' +
+        ? '<p class="aviso" style="background:var(--lima-soft);color:var(--lima-texto)">Recibió ' +
           esc(ent.receptorName) + (ent.deliveryDate ? " el " + esc(ent.deliveryDate) +
           " a las " + esc(ent.deliveryHour || "") : "") + '</p>' : "") +
       (ev.length
@@ -4435,11 +4482,11 @@ function pintar(){
     envios: vistaEnvios, clientes: vistaClientes }[A.vista];
   document.getElementById("vista").innerHTML =
     (!REMOTO && location.protocol.indexOf("http") === 0
-      ? '<div class="aviso" style="margin-top:14px;background:#fff4e0;color:#a76a00">' +
+      ? '<div class="aviso" style="margin-top:14px;background:var(--ambar-soft);color:var(--ambar-texto)">' +
         '<b>La app no está conectada al inventario.</b><br>' +
         '<span style="font-weight:400">Avisa al administrador del inventario. Mientras tanto no hay inicio de ' +
         'sesión y lo que registres queda solo en este dispositivo.</span><br>' +
-        '<button style="margin-top:8px;font-size:12px;text-decoration:underline;color:#a76a00" ' +
+        '<button style="margin-top:8px;font-size:12px;text-decoration:underline;color:var(--ambar-texto)" ' +
         'data-accion="conectar">Soy el administrador: configurar la conexión</button></div>' : "") +
     (A.sinGuardar ? '<div class="aviso" style="margin-top:14px">' +
       '<b>Los cambios no se están guardando' + (REMOTO ? " en el servidor" : " en este dispositivo") + '.</b>' +
@@ -4508,7 +4555,7 @@ function pintarFicha(){
     '<div class="galeria">' + (gal[ctx.idx] ? '<img src="' + gal[ctx.idx] + '" alt="">' : ICONO_CAJA) + '</div>' +
     (gal.length > 1 ? '<div class="tiras">' + gal.map((g,i) =>
       '<button class="tira ' + (i === ctx.idx ? "on" : "") + '" data-foto-idx="' + i + '"><img src="' + g + '" alt=""></button>').join("") + '</div>' : "") +
-    (!activo(m) ? '<p class="aviso" style="background:#f1f3f5;color:var(--n500)">Modelo desactivado: no aparece en el ' +
+    (!activo(m) ? '<p class="aviso" style="background:var(--linea);color:var(--n500)">Modelo desactivado: no aparece en el ' +
       'catálogo del vendedor ni se puede cotizar.</p>' : "") +
     '<div><div style="font-weight:900;color:var(--azul);font-size:17px;line-height:1.25">' + esc(m.nombre || m.modelo || m.codigo) + '</div>' +
     '<div class="mini">' + esc(m.codigo) + (m.modelo ? " · " + esc(m.modelo) : "") + '</div></div>' +
@@ -5561,7 +5608,7 @@ function pintarUsuarios(aviso){
       '<button class="fila" data-usuario="' + esc(p.id) + '"><div class="t"><b>' + esc(p.nombre || p.email) +
         (p.id === Sesion.uid ? ' <span class="mini">(tú)</span>' : "") + '</b>' +
         '<span>' + esc(p.email || "") + (p.grupo ? " · " + esc(p.grupo) : "") +
-        (puedeRecibir(p) ? "" : ' · <span style="color:#a76a00">no recibe tareas</span>') + '</span></div>' +
+        (puedeRecibir(p) ? "" : ' · <span style="color:var(--ambar-texto)">no recibe tareas</span>') + '</span></div>' +
       '<span class="pt ' + (p.rol === "super" ? "pt-rev" : p.rol === "admin" ? "pt-res" : "pt-ent") + '">' +
       (p.rol === "super" ? "Super" : nombreRol(p.rol)) + '</span>' +
       '</button>').join("") + '</div>' : '<p class="mini">Todavía no hay perfiles cargados.</p>') +
@@ -6021,7 +6068,7 @@ async function modalCX(aviso, bien){
     (ayuda ? '<p class="mini" style="margin:0">' + ayuda + '</p>' : "");
   abrirModal(
     (aviso ? '<div class="aviso"' + (bien
-      ? ' style="background:#eef6dd;color:var(--lima-texto)"' : "") + '>' + esc(aviso) + '</div>' : "") +
+      ? ' style="background:var(--lima-soft);color:var(--lima-texto)"' : "") + '>' + esc(aviso) + '</div>' : "") +
     '<p class="mini" style="margin:0">Datos del remitente, los mismos para todos los envíos. Las claves ' +
     'de la API van en los Secrets de la función, no acá.</p>' +
     campo("x-cuenta", "Número de cuenta corriente con Chilexpress") +
