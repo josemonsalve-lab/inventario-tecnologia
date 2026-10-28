@@ -876,16 +876,17 @@ const ICO = {
   taller: "M14.7 6.3a4 4 0 01-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2z",
   panel: "M12 3a9 9 0 109 9h-9z M13 3v8h8a8 8 0 00-8-8z",
   envios: "M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z",
+  clientes: "M7 11a3 3 0 100-6 3 3 0 000 6zM17 11a3 3 0 100-6 3 3 0 000 6zM2 20v-1a5 5 0 015-5 5 5 0 015 5v1M12 20v-1a5 5 0 015-5 5 5 0 015 5v1",
   tareas: "M9 11l2 2 4-4M4 5h16v16H4zM9 3h6v2H9z"
 };
 const NAV_ADMIN = [["panel","Panel"],["tareas","Tareas"],["envios","Envíos"],["taller","Taller"],
-  ["proveedores","Proveedores"],["stock","Stock"],["equipos","Equipos"],["cotiza","Cotizar"],
-  ["reportes","Reportes"],["ajustes","Ajustes"]];
+  ["proveedores","Proveedores"],["clientes","Clientes"],["stock","Stock"],["equipos","Equipos"],
+  ["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
 const NAV_VEND  = [["panel","Panel"],["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
 const nav = () => esAdmin() ? NAV_ADMIN : NAV_VEND;
 const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", proveedores:"Proveedores",
   movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes",
-  panel:"Panel", envios:"Envíos", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
+  panel:"Panel", envios:"Envíos", clientes:"Clientes", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
 
 function pintarNav(){
   document.getElementById("nav").innerHTML = nav().map(([id,txt]) => {
@@ -3389,6 +3390,173 @@ async function llamarCX(cuerpo){
   return j;
 }
 
+/* ----------------------------------------------------------- clientes */
+/* Los clientes no son una tabla: salen de los equipos entregados, de los
+   envíos y de las cotizaciones. Se agrupan sin distinguir mayúsculas ni
+   tildes, porque el mismo nombre se escribe de varias formas. */
+function clientesResumen(){
+  const map = {};
+  const tocar = (nombre, campo) => {
+    const n = String(nombre || "").trim();
+    if(!n) return null;
+    const k = sinTildes(n);
+    const c = map[k] = map[k] || { nombre: n, equipos: [], envios: 0, cotiza: 0,
+      ultima: "", comunas: {}, variantes: {} };
+    c.variantes[n] = (c.variantes[n] || 0) + 1;
+    if(campo) c[campo]++;
+    return c;
+  };
+
+  for(const u of A.unidades){
+    const c = tocar(u.cliente);
+    if(!c) continue;
+    c.equipos.push(u);
+    if(u.entrega && u.entrega > c.ultima) c.ultima = u.entrega;
+  }
+  for(const e of (A.envios || [])){
+    const c = tocar(e.cliente, "envios");
+    if(c && e.comuna) c.comunas[e.comuna] = (c.comunas[e.comuna] || 0) + 1;
+  }
+  for(const q of (A.cotizaciones || [])) tocar(q.cliente, "cotiza");
+
+  /* el nombre que se muestra es la forma más usada */
+  const lista = Object.values(map).map(c => {
+    c.nombre = Object.keys(c.variantes).sort((a, b) => c.variantes[b] - c.variantes[a])[0] || c.nombre;
+    c.total = c.equipos.length;
+    c.activos = c.equipos.filter(u => u.situacion !== "Baja").length;
+    return c;
+  });
+  return lista.sort((a, b) => b.total - a.total || a.nombre.localeCompare(b.nombre));
+}
+
+function vistaClientes(){
+  const q = A.q.toLowerCase();
+  const todos = clientesResumen();
+  const cs = todos.filter(c => !q || sinTildes(c.nombre).includes(sinTildes(q)) ||
+    c.equipos.some(u => String(u.serie || "").toLowerCase().includes(q)));
+
+  const conEquipos = todos.filter(c => c.total > 0);
+  const resumen = '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+    '<tr><td>Clientes con equipos</td><td>' + nf.format(conEquipos.length) + '</td></tr>' +
+    '<tr><td>Equipos en clientes</td><td>' +
+      nf.format(conEquipos.reduce((a, c) => a + c.total, 0)) + '</td></tr>' +
+    '<tr><td>Clientes solo cotizados</td><td>' +
+      nf.format(todos.filter(c => !c.total && c.cotiza).length) + '</td></tr>' +
+    '</table></div>';
+
+  if(!todos.length) return resumen +
+    vacio("Sin clientes", "Aparecen solos cuando entregas equipos, registras un envío o guardas una cotización.", "", "");
+  if(!cs.length) return resumen + '<p class="mini">Nadie con ese nombre.</p>';
+
+  return resumen + '<div class="lista">' + cs.slice(0, 300).map(c =>
+    '<button class="fila" data-cliente="' + esc(c.nombre) + '"><div class="t">' +
+      '<b>' + esc(c.nombre) + '</b>' +
+      '<span>' + (c.total
+        ? nf.format(c.total) + (c.total === 1 ? " equipo" : " equipos") +
+          (c.activos !== c.total ? " · " + (c.total - c.activos) + " de baja" : "")
+        : "sin equipos asignados") +
+        (c.envios ? " · " + c.envios + (c.envios === 1 ? " envío" : " envíos") : "") +
+        (c.cotiza ? " · " + c.cotiza + (c.cotiza === 1 ? " cotización" : " cotizaciones") : "") + '</span>' +
+      (c.ultima ? '<span>Última entrega: ' + fechaCorta(c.ultima) + '</span>' : "") +
+    '</div>' +
+    (c.total ? '<b style="color:var(--azul);font-size:17px">' + nf.format(c.total) + '</b>' : "") +
+    '</button>').join("") + '</div>';
+}
+
+/* Ficha del cliente: qué modelos tiene y en qué estado */
+function fichaCliente(nombre){
+  const c = clientesResumen().find(x => sinTildes(x.nombre) === sinTildes(nombre));
+  if(!c) return;
+  ctx = { tipo: "cliente", nombre: c.nombre };
+
+  /* por modelo */
+  const porModelo = {};
+  for(const u of c.equipos){
+    const k = u.codigo || "(sin código)";
+    const x = porModelo[k] = porModelo[k] || { codigo: k, total: 0, baja: 0, revision: 0 };
+    x.total++;
+    if(u.situacion === "Baja") x.baja++;
+    if(u.situacion === "En revisión") x.revision++;
+  }
+  const modelos = Object.values(porModelo).sort((a, b) => b.total - a.total);
+
+  const envios = (A.envios || []).filter(e => sinTildes(e.cliente) === sinTildes(c.nombre))
+    .sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
+  const cotis = (A.cotizaciones || []).filter(q => sinTildes(q.cliente) === sinTildes(c.nombre))
+    .sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
+  const taller = (A.mantenimientos || []).filter(m =>
+    c.equipos.some(u => u.serie === m.serie) || sinTildes(m.cliente || "") === sinTildes(c.nombre));
+
+  abrirModal(
+    '<div class="fila" style="display:block;background:var(--fondo)"><div class="t">' +
+      '<b style="font-size:16px">' + esc(c.nombre) + '</b>' +
+      '<span>' + nf.format(c.total) + (c.total === 1 ? " equipo" : " equipos") +
+        " · " + modelos.length + (modelos.length === 1 ? " modelo" : " modelos") + '</span>' +
+      (c.ultima ? '<span>Última entrega: ' + fechaCorta(c.ultima) + '</span>' : "") +
+    '</div></div>' +
+
+    (modelos.length ? '<div class="sec">Equipos por modelo</div><div class="lista">' + modelos.map(m => {
+      const mod = modelo(m.codigo);
+      return '<button class="fila" data-climod="' + esc(m.codigo) + '"><div class="t">' +
+        '<b>' + esc(mod ? (mod.nombre || mod.modelo || m.codigo) : m.codigo) + '</b>' +
+        '<span>' + esc(m.codigo) +
+          (m.baja ? ' · <span style="color:var(--rojo)">' + m.baja + ' de baja</span>' : "") +
+          (m.revision ? " · " + m.revision + " en revisión" : "") + '</span></div>' +
+        '<b style="color:var(--azul);font-size:16px">' + nf.format(m.total) + '</b></button>';
+    }).join("") + '</div>' : '<p class="mini">Este cliente todavía no tiene equipos asignados.</p>') +
+
+    (taller.length ? '<div class="sec">En el taller</div><div class="lista">' + taller.slice(0, 5).map(m =>
+      '<div class="fila"><div class="t"><b>' + esc(m.serie) + '</b>' +
+      '<span>' + esc(m.motivo || "") + '</span></div>' +
+      '<span class="pt pt-rev">' + esc(m.estado) + '</span></div>').join("") + '</div>' : "") +
+
+    (envios.length ? '<div class="sec">Envíos</div><div class="lista">' + envios.slice(0, 5).map(e =>
+      '<button class="fila" data-envio="' + e.id + '"><div class="t">' +
+      '<b>' + (e.ot ? esc(e.ot) : "Sin orden") + '</b>' +
+      '<span>' + fechaCorta(e.fecha) + " · " + (e.series || []).length + " equipos" +
+      (e.comuna ? " · " + esc(e.comuna) : "") + '</span></div>' +
+      '<span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></button>')
+      .join("") + '</div>' : "") +
+
+    (cotis.length ? '<div class="sec">Cotizaciones</div><div class="lista">' + cotis.slice(0, 5).map(q =>
+      '<button class="fila" data-coti="' + q.id + '"><div class="t">' +
+      '<b>' + esc(q.folio || "Sin folio") + '</b>' +
+      '<span>' + fechaCorta(q.fecha) + " · " + esc(q.modalidad || "") + '</span></div></button>')
+      .join("") + '</div>' : "") +
+
+    '<button class="btn btn-linea btn-w" data-accion="equipos-cliente">Ver sus equipos uno por uno</button>' +
+    (c.total ? '<button class="btn btn-linea btn-w" data-accion="csv-cliente">Exportar sus equipos a CSV</button>' : ""),
+    "Cliente");
+}
+
+/* Lista de las series de un modelo en ese cliente */
+function equiposClienteModelo(codigo){
+  const nombre = ctx.nombre;
+  const us = A.unidades.filter(u => sinTildes(u.cliente || "") === sinTildes(nombre) && u.codigo === codigo);
+  const mod = modelo(codigo);
+  abrirModal(
+    '<p class="mini" style="margin:0">' + esc(nombre) + ' · ' +
+      esc(mod ? (mod.nombre || mod.modelo || codigo) : codigo) + '</p>' +
+    '<div class="lista">' + us.map(u =>
+      '<button class="fila" data-unidad="' + u.id + '"><div class="t"><b>' + esc(u.serie) + '</b>' +
+      '<span>' + (u.entrega ? "Entregado el " + fechaCorta(u.entrega) : "Sin fecha de entrega") +
+      (u.tipo ? " · " + esc(u.tipo) : "") + '</span></div>' +
+      '<span class="pt ' + (CLASE_SIT[u.situacion] || "pt-ent") + '">' + esc(u.situacion) + '</span></button>').join("") + '</div>' +
+    '<button class="btn btn-suave btn-w" data-accion="volver-cliente">Volver al cliente</button>',
+    nf.format(us.length) + (us.length === 1 ? " equipo" : " equipos"));
+}
+
+function csvCliente(){
+  const nombre = ctx.nombre;
+  const us = A.unidades.filter(u => sinTildes(u.cliente || "") === sinTildes(nombre));
+  if(!us.length) return avisar("Sin equipos");
+  descargarCSV("cliente-" + nombre.replace(/[^\w]+/g, "-").toLowerCase(),
+    ["serie","codigo","modelo","situacion","entrega","tipo","instalador","vendedor"],
+    us.map(u => { const m = modelo(u.codigo) || {};
+      return [u.serie, u.codigo, m.nombre || m.modelo || "", u.situacion, u.entrega || "",
+        u.tipo || "", u.instalador || "", u.vendedor || ""]; }));
+}
+
 function vistaEnvios(){
   const q = A.q.toLowerCase();
   const f = A.filtro === "Todas" ? "Activos" : A.filtro;
@@ -4191,7 +4359,7 @@ function pintar(){
   const v = { stock: vistaStock, equipos: vistaEquipos, proveedores: vistaProveedores, movs: vistaMovs,
     ajustes: vistaAjustes, dispo: vistaDisponibilidad, cuenta: vistaCuenta, cotiza: vistaCotizador,
     reportes: vistaReportes, taller: vistaTaller, tareas: vistaTareas, panel: vistaPanel,
-    envios: vistaEnvios }[A.vista];
+    envios: vistaEnvios, clientes: vistaClientes }[A.vista];
   document.getElementById("vista").innerHTML =
     (!REMOTO && location.protocol.indexOf("http") === 0
       ? '<div class="aviso" style="margin-top:14px;background:#fff4e0;color:#a76a00">' +
@@ -6035,7 +6203,7 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy],[data-ir],[data-pgrupo],[data-pperiodo],[data-envio],[data-cxserv]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy],[data-ir],[data-pgrupo],[data-pperiodo],[data-envio],[data-cxserv],[data-cliente],[data-climod],[data-coti]");
   if(!t) return;
   const d = t.dataset;
 
@@ -6099,6 +6267,8 @@ document.addEventListener("click", async ev => {
   if(d.usuario) return modalUsuario(d.usuario);
   if(d.zproy) return elegirProyectoZoho(d.zproy);
   if(d.persona){ A.filtroPersona = d.persona; A.filtro = "Todo"; return pintar(); }
+  if(d.cliente) return fichaCliente(d.cliente);
+  if(d.climod) return equiposClienteModelo(d.climod);
   if(d.envio) return fichaEnvio(d.envio);
   if(d.cxserv){ leerEnvio(); ctx.servicioCodigo = d.cxserv; return pintarEnvio(); }
   if(d.tarea) return modalTarea(d.tarea);
@@ -6342,6 +6512,17 @@ document.addEventListener("click", async ev => {
   if(a === "seguir-uno") return seguirEnvios(true);
   if(a === "seguir-envios") return seguirEnvios(false);
   if(a === "consultar-ot") return consultarOT();
+  if(a === "csv-cliente") return csvCliente();
+  if(a === "volver-cliente") return fichaCliente(ctx.nombre);
+  if(a === "equipos-cliente"){
+    const n = ctx.nombre;
+    cerrarModal();
+    A.vista = "equipos"; A.filtroSit = {}; A.filtroModelo = ""; A.filtroTipo = "";
+    A.q = n;
+    const campo = document.getElementById("q");
+    if(campo) campo.value = n;
+    return pintar();
+  }
   if(a === "ver-etiqueta") return verEtiqueta();
   if(a === "pedir-etiqueta") return pedirEtiqueta();
   if(a === "bajar-etiqueta") return bajarEtiqueta();
