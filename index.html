@@ -2632,10 +2632,10 @@ function vistaPanelArea(grupo){
       (venc.length === 1 ? " tarea vencida" : " tareas vencidas") + ' en el área.</p>' : "") +
 
     tarjetaPanel("Trabajo por persona", barrasH(personas), { vista: "tareas", chip: "Por persona" }) +
-    tarjetaPanel("Tareas por mes · creadas y cerradas", barrasMes(barrasDobles),
+    tarjetaPanel("Tareas por mes · creadas y cerradas", barrasEje(barrasDobles, { linea: true }),
       { vista: "tareas", chip: "Estadísticas" }) +
-    tarjetaPanel("Ingresos al taller por mes", barrasMes(barrasTaller), { vista: "taller" }) +
-    tarjetaPanel("Equipos entregados por mes", barrasMes(barrasEntregas), { vista: "equipos" }) +
+    tarjetaPanel("Ingresos al taller por mes", barrasEje(barrasTaller), { vista: "taller" }) +
+    tarjetaPanel("Equipos entregados por mes", barrasEje(barrasEntregas), { vista: "equipos" }) +
     (costo ? '<p class="mini" style="margin:0">Costo de reparaciones en el período: ' +
       clp(costo) + '.</p>' : "");
 }
@@ -3287,6 +3287,79 @@ function barrasH(datos, alto){
   }).join("") + '</div>';
 }
 
+/* Escala "bonita": 1, 2, 5, 10, 20, 50... para que los valores del eje
+   sean redondos en vez de decimales. */
+function escalaEje(max){
+  if(max <= 5) return { tope: Math.max(max, 1), paso: 1 };
+  const exp = Math.pow(10, Math.floor(Math.log10(max / 5)));
+  /* se prueba de menor a mayor y se toma el primero que deje como mucho
+     seis líneas: así el eje nunca queda ni apretado ni demasiado grueso */
+  for(const f of [1, 2, 2.5, 5, 10, 20]){
+    const paso = f * exp;
+    if(Math.ceil(max / paso) <= 6) return { tope: Math.ceil(max / paso) * paso, paso: paso };
+  }
+  return { tope: max, paso: max / 5 };
+}
+
+/* Gráfico de barras por mes con ejes y valores a la vista. */
+function barrasEje(meses, opciones){
+  if(!meses.length) return '<p class="mini">Sin datos en este período.</p>';
+  const o = opciones || {};
+  const An = 340, Al = 170, izq = 30, der = 6, arr = 12, aba = 26;
+  const max = Math.max(...meses.map(m => m.total), 1);
+  const { tope, paso } = escalaEje(max);
+  const anchoUtil = An - izq - der, altoUtil = Al - arr - aba;
+  const paso_x = anchoUtil / meses.length;
+  const anchoBarra = Math.min(paso_x * 0.62, 26);
+  const y = v => arr + altoUtil - (v / tope) * altoUtil;
+
+  let ejes = "", barras = "", etiquetas = "";
+  for(let v = 0; v <= tope + 0.001; v += paso){
+    const yy = y(v).toFixed(1);
+    ejes += '<line x1="' + izq + '" y1="' + yy + '" x2="' + (An - der) + '" y2="' + yy +
+      '" stroke="var(--linea)" stroke-width="1"></line>' +
+      '<text x="' + (izq - 5) + '" y="' + (Number(yy) + 3.5).toFixed(1) +
+      '" text-anchor="end" font-size="8.5" fill="#68808d">' + nf.format(v) + '</text>';
+  }
+
+  meses.forEach((m, i) => {
+    const cx = izq + paso_x * i + paso_x / 2;
+    const x0 = cx - anchoBarra / 2;
+    const yh = y(m.hechas || 0), yt = y(m.total);
+    if(m.total > 0){
+      /* lo cerrado abajo en verde, lo pendiente encima en celeste */
+      barras += '<rect x="' + x0.toFixed(1) + '" y="' + yt.toFixed(1) + '" width="' + anchoBarra.toFixed(1) +
+        '" height="' + Math.max(y(0) - yt, 1).toFixed(1) + '" fill="var(--celeste)" rx="2"></rect>';
+      if(m.hechas) barras += '<rect x="' + x0.toFixed(1) + '" y="' + yh.toFixed(1) +
+        '" width="' + anchoBarra.toFixed(1) + '" height="' + Math.max(y(0) - yh, 1).toFixed(1) +
+        '" fill="var(--lima)" rx="2"></rect>';
+      barras += '<text x="' + cx.toFixed(1) + '" y="' + (yt - 3).toFixed(1) +
+        '" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a5c85">' +
+        nf.format(m.total) + '</text>';
+    }
+    /* con muchos meses las etiquetas no caben: se muestra una de cada dos,
+       y siempre la última para no perder la referencia del final */
+    const saltar = meses.length > 8 && (meses.length - 1 - i) % 2 !== 0;
+    if(!saltar) etiquetas += '<text x="' + cx.toFixed(1) + '" y="' + (Al - 8) +
+      '" text-anchor="middle" font-size="8" fill="#68808d">' + esc(m.etiqueta) + '</text>';
+  });
+
+  /* línea de tendencia opcional, como en los tableros */
+  let linea = "";
+  if(o.linea && meses.length > 1){
+    const pts = meses.map((m, i) =>
+      (izq + paso_x * i + paso_x / 2).toFixed(1) + "," + y(m.hechas || 0).toFixed(1)).join(" ");
+    linea = '<polyline points="' + pts + '" fill="none" stroke="var(--azul)" stroke-width="2" ' +
+      'stroke-linejoin="round" stroke-linecap="round" opacity=".55"></polyline>';
+  }
+
+  return '<svg viewBox="0 0 ' + An + ' ' + Al + '" width="100%" style="display:block">' +
+    ejes +
+    '<line x1="' + izq + '" y1="' + y(0) + '" x2="' + (An - der) + '" y2="' + y(0) +
+      '" stroke="#b9c6d3" stroke-width="1.2"></line>' +
+    barras + linea + etiquetas + '</svg>';
+}
+
 function barrasMes(meses){
   if(!meses.length) return '<p class="mini">Sin datos en este período.</p>';
   const max = Math.max(...meses.map(m => m.total)) || 1;
@@ -3354,7 +3427,7 @@ function vistaEstadisticas(ts){
       'background:var(--celeste);border-radius:2px"></i> pendientes   ' +
       '<i style="display:inline-block;width:9px;height:9px;background:var(--lima);border-radius:2px"></i> cerradas</p>' +
     '<div class="sec">Por persona</div>' + barrasH(personas) +
-    '<div class="sec">Por mes</div>' + barrasMes(meses) +
+    '<div class="sec">Por mes</div>' + barrasEje(meses) +
     '<button class="btn btn-linea btn-w" style="margin-top:14px" data-accion="csv-tareas">' +
       'Exportar estas ' + nf.format(ts.length) + ' tareas a CSV</button>';
 }
