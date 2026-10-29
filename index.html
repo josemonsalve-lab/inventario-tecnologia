@@ -178,6 +178,12 @@ details summary::-webkit-details-marker{display:none}
 .dona-leyenda span{flex:1;color:var(--n700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dona-leyenda b{color:var(--azul)}
 .dona-leyenda em{font-style:normal;color:var(--n500);min-width:30px;text-align:right}
+.menu-mas{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.menu-item{display:flex;align-items:center;gap:10px;padding:13px 12px;border:1px solid var(--linea);
+  border-radius:12px;background:#fff;color:var(--azul);font-weight:700;font-size:13.5px;text-align:left}
+.menu-item.on{background:var(--cielo);border-color:var(--cielo)}
+.menu-item span{flex:1}
+.menu-globo{background:var(--rojo);color:#fff;border-radius:100px;font-size:11px;padding:1px 7px}
 .graf{display:flex;flex-direction:column;gap:5px}
 .graf-fila{display:flex;align-items:center;gap:8px}
 .graf-et{font-size:11px;color:var(--n700);width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -893,17 +899,64 @@ const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", provee
   movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes",
   panel:"Panel", envios:"Envíos", clientes:"Clientes", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
 
-function pintarNav(){
-  document.getElementById("nav").innerHTML = nav().map(([id,txt]) => {
-    const d = ICO[id];
-    return (
-    '<button data-nav="' + id + '" class="' + (A.vista === id ? "on" : "") + '">' +
+/* En el teléfono la barra solo muestra cinco accesos: el resto vive en
+   "Más". En pantallas anchas, donde el menú va al costado, caben todos. */
+const NAV_TOPE = 5;
+const anchaPantalla = () => window.innerWidth >= 900;
+
+function botonNav(id, txt, pend){
+  const d = ICO[id];
+  return '<button data-nav="' + id + '" class="' + (A.vista === id ? "on" : "") + '">' +
     '<span style="position:relative;display:block">' +
-    '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>' +
-    (id === "tareas" && tareasPendientes() ? '<span class="globo">' +
-      (tareasPendientes() > 9 ? "9+" : tareasPendientes()) + '</span>' : "") + '</span>' +
-    '<span>' + txt + '</span></button>');
-  }).join("");
+    '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>' +
+    (pend ? '<span class="globo">' + (pend > 9 ? "9+" : pend) + '</span>' : "") + '</span>' +
+    '<span>' + esc(txt) + '</span></button>';
+}
+
+function pintarNav(){
+  const todos = nav();
+  const pendientes = tareasPendientes();
+  let html;
+
+  if(anchaPantalla() || todos.length <= NAV_TOPE + 1){
+    html = todos.map(([id, txt]) => botonNav(id, txt, id === "tareas" ? pendientes : 0)).join("");
+  } else {
+    /* si estás en una sección que quedó en "Más", esa toma el último lugar
+       para que no desaparezca de la vista mientras la usas */
+    let visibles = todos.slice(0, NAV_TOPE);
+    let resto = todos.slice(NAV_TOPE);
+    const actual = resto.find(x => x[0] === A.vista);
+    if(actual){
+      resto = [visibles[NAV_TOPE - 1], ...resto.filter(x => x[0] !== A.vista)];
+      visibles = [...visibles.slice(0, NAV_TOPE - 1), actual];
+    }
+    const ocultasConPendientes = resto.some(x => x[0] === "tareas") && pendientes;
+    html = visibles.map(([id, txt]) => botonNav(id, txt, id === "tareas" ? pendientes : 0)).join("") +
+      '<button data-accion="mas-menu" class="' + (A.menuMas ? "on" : "") + '">' +
+      '<span style="position:relative;display:block">' +
+      '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M4 7h16M4 12h16M4 17h16"/></svg>' +
+      (ocultasConPendientes ? '<span class="globo">' +
+        (pendientes > 9 ? "9+" : pendientes) + '</span>' : "") + '</span>' +
+      '<span>Más</span></button>';
+  }
+  document.getElementById("nav").innerHTML = html;
+}
+
+/* Menú con todas las secciones, desde la barra inferior. */
+function menuMas(){
+  const pendientes = tareasPendientes();
+  abrirModal(
+    '<div class="menu-mas">' + nav().map(([id, txt]) =>
+      '<button class="menu-item' + (A.vista === id ? " on" : "") + '" data-nav="' + id + '">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + ICO[id] + '"/></svg>' +
+      '<span>' + esc(txt) + '</span>' +
+      (id === "tareas" && pendientes ? '<b class="menu-globo">' + pendientes + '</b>' : "") +
+      '</button>').join("") + '</div>',
+    "Secciones");
 }
 
 function pintarEstado(){
@@ -6348,7 +6401,7 @@ document.addEventListener("click", async ev => {
     if(d.ircat) A.filtro = d.ircat;
     return pintar();
   }
-  if(d.nav){ A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.filtroTipo = ""; A.filtroSit = {};
+  if(d.nav){ cerrarModal(); A.vista = d.nav; A.filtro = "Todas"; A.filtroModelo = ""; A.filtroTipo = ""; A.filtroSit = {};
     A.filtroPersona = ""; A.filtroGrupo = "";
     A.soloBajos = false; A.q = ""; document.getElementById("q").value = ""; return pintar(); }
   if(d.cat){ A.filtro = d.cat; return pintar(); }
@@ -6676,6 +6729,7 @@ document.addEventListener("click", async ev => {
   if(a === "confirmar-vaciar") return vaciarEquipos();
   if(a === "deshacer-importacion") return modalDeshacer();
   if(a === "confirmar-deshacer") return deshacerImportacion();
+  if(a === "mas-menu") return menuMas();
   if(a === "cx-ajustes") return modalCX("");
   if(a === "guardar-cx") return guardarCX();
   if(a === "probar-cx") return probarCX();
@@ -6814,6 +6868,13 @@ document.getElementById("fab").addEventListener("click", () => {
   return modalModelo(null);
 });
 document.addEventListener("keydown", e => { if(e.key === "Escape") cerrarModal(); });
+
+/* Al girar el teléfono o cambiar el tamaño de la ventana, la barra se rehace:
+   en pantalla ancha caben todas las secciones y "Más" sobra. */
+let anchoAntes = anchaPantalla();
+window.addEventListener("resize", () => {
+  if(anchaPantalla() !== anchoAntes){ anchoAntes = anchaPantalla(); pintarNav(); }
+});
 
 /* -------------------------------------------------------------------- sesión */
 function calcularDispoLocal(){
