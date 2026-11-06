@@ -3826,8 +3826,9 @@ function vistaVisitas(){
 }
 
 /* ---------------------------------------------- formulario de la visita */
-function modalVisita(id){
+async function modalVisita(id){
   const v = id ? A.visitas.find(x => x.id === id) : null;
+  if(v) for(const f of (v.fotos || [])) await cargarFoto(f);
   ctx = { tipo: "visita", id: id || null,
     fotos: v ? (v.fotos || []).slice() : [],
     firmaTecnico: v ? v.firmaTecnico : "", firmaCliente: v ? v.firmaCliente : "",
@@ -3891,7 +3892,8 @@ function pintarVisita(aviso){
 
     '<div class="sec">Fotos del trabajo</div>' +
     '<div class="galeria-visita">' +
-      ctx.fotos.map((f, i) => '<div class="foto-v"><img src="' + esc(A.fotos[f] || "") + '" alt="">' +
+      ctx.fotos.map((f, i) => '<div class="foto-v">' +
+        (A.fotos[f] ? '<img src="' + esc(A.fotos[f]) + '" alt="">' : '<span class="mini">cargando…</span>') +
         '<button class="quita" data-quitafoto="' + (i + 1) + '">×</button></div>').join("") +
       (ctx.fotos.length < 6
         ? '<button class="foto-v agregar" data-accion="foto-visita">' +
@@ -4155,10 +4157,12 @@ function folioVisita(){
 }
 
 /* ------------------------------------------------------- ficha y PDF */
-function fichaVisita(id){
+async function fichaVisita(id){
   const v = A.visitas.find(x => x.id === id);
   if(!v) return;
   ctx = { tipo: "ficha-visita", id: id };
+  /* las fotos viven aparte y se traen a demanda */
+  for(const f of (v.fotos || [])) await cargarFoto(f);
   abrirModal(
     '<div class="fila" style="display:block;background:var(--fondo)"><div class="t">' +
       '<b style="font-size:15px">' + esc(v.cliente) + '</b>' +
@@ -4187,7 +4191,9 @@ function fichaVisita(id){
     (v.pendiente ? '<p class="aviso">Pendiente: ' + esc(v.pendiente) + '</p>' : "") +
 
     ((v.fotos || []).length ? '<div class="sec">Fotos</div><div class="galeria-visita">' +
-      v.fotos.map(f => '<div class="foto-v"><img src="' + esc(A.fotos[f] || "") + '" alt=""></div>').join("") +
+      v.fotos.map(f => A.fotos[f]
+        ? '<div class="foto-v"><img src="' + esc(A.fotos[f]) + '" alt=""></div>'
+        : '<div class="foto-v agregar"><span>foto no disponible</span></div>').join("") +
       '</div>' : "") +
 
     '<div class="sec">Firmas</div><div class="f2">' +
@@ -4209,6 +4215,7 @@ function fichaVisita(id){
 async function pdfVisita(id){
   const v = A.visitas.find(x => x.id === id);
   if(!v) return;
+  for(const f of (v.fotos || [])) await cargarFoto(f);
   await cargarJsPDF();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -4251,6 +4258,8 @@ async function pdfVisita(id){
 
   /* fotos, en dos columnas */
   const fotos = (v.fotos || []).map(f => A.fotos[f]).filter(Boolean);
+  if(fotos.length < (v.fotos || []).length)
+    avisar("Faltan " + ((v.fotos || []).length - fotos.length) + " fotos: se generó el informe sin ellas");
   if(fotos.length){
     y += 3;
     doc.setTextColor(30, 85, 145); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
