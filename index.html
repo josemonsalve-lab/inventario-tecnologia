@@ -178,6 +178,25 @@ details summary::-webkit-details-marker{display:none}
 .dona-leyenda span{flex:1;color:var(--n700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dona-leyenda b{color:var(--azul)}
 .dona-leyenda em{font-style:normal;color:var(--n500);min-width:30px;text-align:right}
+.galeria-visita{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.foto-v{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid var(--linea)}
+.foto-v img{width:100%;height:100%;object-fit:cover;display:block}
+.foto-v .quita{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:100px;
+  background:rgba(0,0,0,.55);color:#fff;font-size:15px;line-height:1;border:0}
+.foto-v.agregar{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  background:var(--fondo);color:var(--azul);font-size:10.5px;font-weight:700;border-style:dashed}
+.firma-caja{border:1px solid var(--linea);border-radius:12px;padding:10px 12px 12px;background:#fff}
+.firma-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.firma-hd b{font-size:12.5px;color:var(--azul)}
+.firma-lienzo{display:block;width:100%;height:130px;border:1px dashed var(--linea);border-radius:8px;
+  background:#fff;touch-action:none;cursor:crosshair}
+.firma-ayuda{display:block;font-size:10.5px;color:var(--n500);text-align:center;margin-top:4px}
+.firma-hecha{display:block;width:100%;max-height:130px;object-fit:contain;background:#fff;
+  border:1px solid var(--linea);border-radius:8px}
+.notas{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.nota{padding:9px 0;border:1px solid var(--linea);border-radius:8px;background:#fff;
+  color:var(--azul);font-weight:700;font-size:12px}
+.nota.on{background:var(--celeste);color:#fff;border-color:var(--celeste)}
 .menu-mas{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .menu-item{display:flex;align-items:center;gap:10px;padding:13px 12px;border:1px solid var(--linea);
   border-radius:12px;background:#fff;color:var(--azul);font-weight:700;font-size:13.5px;text-align:left}
@@ -384,6 +403,9 @@ const MAPA = {
   envios: { comunaCodigo: "comuna_codigo", servicioCodigo: "servicio_codigo",
     creadorNombre: "creador_nombre" },
   direcciones: { comunaCodigo: "comuna_codigo" },
+  visitas: { tecnicoId: "tecnico_id", firmaTecnico: "firma_tecnico", firmaCliente: "firma_cliente",
+    horaInicio: "hora_inicio", horaFin: "hora_fin", creadorNombre: "creador_nombre",
+    tareaId: "tarea_id" },
   cotizaciones: { usuarioId: "usuario_id", usuarioEmail: "usuario_email", envioUF: "envio_uf",
     instalacionUF: "instalacion_uf", totalUF: "total_uf" },
   proveedores: {}, movimientos: {}, fotos: {}
@@ -625,6 +647,7 @@ async function sincronizar(silencioso){
     if(esAdmin()){
       A.envios = (await traerTodo("envios", "select=*&order=fecha.desc")).map(f => deFila("envios", f));
       A.direcciones = (await traerTodo("direcciones", "select=*&order=cliente")).map(f => deFila("direcciones", f));
+      A.visitas = (await traerTodo("visitas", "select=*&order=fecha.desc")).map(f => deFila("visitas", f));
     }
     if(esAdmin()){
       try{
@@ -634,6 +657,7 @@ async function sincronizar(silencioso){
         A.zoho.ultima = c.zoho_ultima_sync || "";
         A.zoho.modo = c.zoho_modo || "traer";
         A.cxAmbiente = c.cx_ambiente || "prueba";
+        A.motivosVisita = (c.visita_motivos || "").split(",").map(x => x.trim()).filter(Boolean);
       }catch(e){}
     }
     if(!A.perfiles.length) A.perfiles = await cargarPerfiles();
@@ -641,7 +665,7 @@ async function sincronizar(silencioso){
     await Store.set("cache", { modelos: A.modelos, proveedores: A.proveedores, unidades: A.unidades,
       movs: A.movs, dispo: A.dispo, facturas: A.facturas, cotizaciones: A.cotizaciones,
       mantenimientos: A.mantenimientos, tareas: A.tareas, perfiles: A.perfiles,
-      envios: A.envios, direcciones: A.direcciones, ts: A.ultima, rol: A.rol });
+      envios: A.envios, direcciones: A.direcciones, visitas: A.visitas, ts: A.ultima, rol: A.rol });
   }catch(e){
     A.enLinea = false;
     if(!silencioso) avisar("Sin conexión: mostrando la última copia");
@@ -654,7 +678,7 @@ async function usarCache(){
   A.unidades = c.unidades || []; A.movs = c.movs || []; A.dispo = c.dispo || []; A.facturas = c.facturas || [];
   A.cotizaciones = c.cotizaciones || []; A.mantenimientos = c.mantenimientos || [];
   A.tareas = c.tareas || []; A.perfiles = c.perfiles || [];
-  A.envios = c.envios || []; A.direcciones = c.direcciones || [];
+  A.envios = c.envios || []; A.direcciones = c.direcciones || []; A.visitas = c.visitas || [];
   A.ultima = c.ts; A.enLinea = false;
   return true;
 }
@@ -663,7 +687,7 @@ async function usarCache(){
 const A = {
   modelos: [], proveedores: [], unidades: [], movs: [], fotos: {}, dispo: [], facturas: [],
   cotizaciones: [], cot: null, selEq: {}, mantenimientos: [], perfiles: [], tareas: [],
-  envios: [], direcciones: [], comunasCX: [],
+  envios: [], direcciones: [], comunasCX: [], visitas: [], motivosVisita: [],
   zoho: { activo: false, ultima: "", modo: "traer" }, cxAmbiente: "prueba",
   rep: { tipo: "modelo", periodo: "todo", desde: "", hasta: "", situacion: "Todas",
          categoria: "Todas", proveedorId: "", usuario: "", panel: "", cols: {}, sel: {} },
@@ -676,7 +700,7 @@ const A = {
 const esAdmin = () => A.rol === "admin" || A.rol === "super";
 const esSuper = () => A.rol === "super";
 const CLAVE = { modelos: "modelos", unidades: "unidades", proveedores: "proveedores", movimientos: "movs", facturas: "facturas", cotizaciones: "cotizaciones", mantenimientos: "mantenimientos",
-  tareas: "tareas", envios: "envios", direcciones: "direcciones" };
+  tareas: "tareas", envios: "envios", direcciones: "direcciones", visitas: "visitas" };
 
 const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -887,17 +911,18 @@ const ICO = {
   taller: "M14.7 6.3a4 4 0 01-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2z",
   panel: "M12 3a9 9 0 109 9h-9z M13 3v8h8a8 8 0 00-8-8z",
   envios: "M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z",
+  visitas: "M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1116 0zM12 7v6M9 10h6",
   clientes: "M7 11a3 3 0 100-6 3 3 0 000 6zM17 11a3 3 0 100-6 3 3 0 000 6zM2 20v-1a5 5 0 015-5 5 5 0 015 5v1M12 20v-1a5 5 0 015-5 5 5 0 015 5v1",
   tareas: "M9 11l2 2 4-4M4 5h16v16H4zM9 3h6v2H9z"
 };
-const NAV_ADMIN = [["panel","Panel"],["tareas","Tareas"],["envios","Envíos"],["taller","Taller"],
-  ["proveedores","Proveedores"],["clientes","Clientes"],["stock","Stock"],["equipos","Equipos"],
-  ["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
+const NAV_ADMIN = [["panel","Panel"],["tareas","Tareas"],["visitas","Visitas"],["envios","Envíos"],
+  ["taller","Taller"],["proveedores","Proveedores"],["clientes","Clientes"],["stock","Stock"],
+  ["equipos","Equipos"],["cotiza","Cotizar"],["reportes","Reportes"],["ajustes","Ajustes"]];
 const NAV_VEND  = [["panel","Panel"],["stock","Catálogo"],["dispo","Disponibilidad"],["cotiza","Cotizador"],["cuenta","Mi cuenta"]];
 const nav = () => esAdmin() ? NAV_ADMIN : NAV_VEND;
 const TITULOS = { stock: "Stock por modelo", equipos:"Equipos por serie", proveedores:"Proveedores",
   movs:"Movimientos", reportes:"Reportes", ajustes:"Ajustes", taller:"Mantenimiento", tareas:"Tareas pendientes",
-  panel:"Panel", envios:"Envíos", clientes:"Clientes", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
+  panel:"Panel", envios:"Envíos", clientes:"Clientes", visitas:"Visitas a terreno", dispo:"Disponibilidad", cuenta:"Mi cuenta", cotiza:"Cotizador" };
 
 /* En el teléfono la barra solo muestra cinco accesos: el resto vive en
    "Más". En pantallas anchas, donde el menú va al costado, caben todos. */
@@ -3730,6 +3755,554 @@ function csvCliente(){
         u.tipo || "", u.instalador || "", u.vendedor || ""]; }));
 }
 
+/* ------------------------------------------------------------ visitas */
+const MOTIVOS_DEF = ["Visita técnica", "Instalación de equipos", "Configuración de equipos",
+  "Reposición de equipo", "Reparación de equipo", "Otra"];
+const motivosVisita = () => (A.motivosVisita && A.motivosVisita.length)
+  ? A.motivosVisita : MOTIVOS_DEF;
+
+function vistaVisitas(){
+  const q = A.q.toLowerCase();
+  const f = A.filtro === "Todas" ? "Todas" : A.filtro;
+  const chips = '<div class="chips">' + ["Todas", "Este mes", "Borradores", "Por cliente"].map(x =>
+    '<button class="chip ' + (f === x ? "on" : "") + '" data-sit="' + esc(x) + '">' + x + '</button>').join("") + '</div>';
+
+  const todas = (A.visitas || []).slice().sort((a, b) =>
+    String(b.fecha || "").localeCompare(String(a.fecha || "")) ||
+    String(b.creado || "").localeCompare(String(a.creado || "")));
+  const mes = hoy().slice(0, 7);
+
+  const vs = todas.filter(v => {
+    if(f === "Este mes" && String(v.fecha || "").slice(0, 7) !== mes) return false;
+    if(f === "Borradores" && v.estado !== "Borrador") return false;
+    if(!q) return true;
+    return [v.cliente, v.ubicacion, v.tecnico, v.motivo, v.contacto, v.folio,
+      (v.series || []).join(" ")].filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+
+  const esteMes = todas.filter(v => String(v.fecha || "").slice(0, 7) === mes);
+  const notas = esteMes.map(v => v.evaluacion).filter(x => x > 0);
+  const resumen = '<div class="fila" style="display:block;margin-bottom:12px"><table class="specs">' +
+    '<tr><td>Visitas este mes</td><td>' + nf.format(esteMes.length) + '</td></tr>' +
+    '<tr><td>En total</td><td>' + nf.format(todas.length) + '</td></tr>' +
+    (notas.length ? '<tr><td>Evaluación promedio</td><td>' +
+      (notas.reduce((a, b) => a + b, 0) / notas.length).toFixed(1) + ' de 10</td></tr>' : "") +
+    (todas.filter(v => v.estado === "Borrador").length
+      ? '<tr><td>Sin cerrar</td><td style="color:#a76a00">' +
+        todas.filter(v => v.estado === "Borrador").length + '</td></tr>' : "") +
+    '</table></div>';
+
+  if(f === "Por cliente"){
+    const porC = {};
+    for(const v of todas){
+      const k = sinTildes(v.cliente || "");
+      const x = porC[k] = porC[k] || { nombre: v.cliente, n: 0, ultima: "" };
+      x.n++;
+      if(String(v.fecha || "") > x.ultima) x.ultima = v.fecha;
+    }
+    const filas = Object.values(porC).sort((a, b) => b.n - a.n);
+    return chips + resumen + '<div class="lista">' + filas.map(c =>
+      '<button class="fila" data-visitacli="' + esc(c.nombre) + '"><div class="t">' +
+      '<b>' + esc(c.nombre) + '</b><span>Última: ' + fechaCorta(c.ultima) + '</span></div>' +
+      '<b style="color:var(--azul)">' + c.n + '</b></button>').join("") + '</div>';
+  }
+
+  if(!todas.length) return chips + resumen +
+    vacio("Sin visitas", "Registra una visita a terreno con sus fotos y las firmas del técnico y del cliente.",
+      "Nueva visita", "nueva-visita");
+  if(!vs.length) return chips + resumen + '<p class="mini">Nada con ese filtro.</p>';
+
+  return chips + resumen + '<div class="lista">' + vs.slice(0, 200).map(v =>
+    '<button class="fila" data-visita="' + v.id + '"><div class="t">' +
+      '<b>' + esc(v.cliente) + '</b>' +
+      '<span>' + esc(v.motivo || "Visita") + (v.ubicacion ? " · " + esc(v.ubicacion) : "") + '</span>' +
+      '<span>' + fechaCorta(v.fecha) + (v.tecnico ? " · " + esc(v.tecnico) : "") +
+        ((v.fotos || []).length ? " · " + v.fotos.length + " fotos" : "") + '</span>' +
+    '</div>' +
+    (v.estado === "Borrador"
+      ? '<span class="pt pt-rev">Borrador</span>'
+      : (v.evaluacion ? '<b style="color:var(--azul)">' + v.evaluacion + '/10</b>' : "")) +
+    '</button>').join("") + '</div>';
+}
+
+/* ---------------------------------------------- formulario de la visita */
+function modalVisita(id){
+  const v = id ? A.visitas.find(x => x.id === id) : null;
+  ctx = { tipo: "visita", id: id || null,
+    fotos: v ? (v.fotos || []).slice() : [],
+    firmaTecnico: v ? v.firmaTecnico : "", firmaCliente: v ? v.firmaCliente : "",
+    series: v ? (v.series || []).slice() : seriesSeleccionadas(),
+    datos: v ? Object.assign({}, v) : {
+      fecha: hoy(), tecnico: Sesion.nombre || "", motivo: motivosVisita()[0],
+      horaInicio: new Date().toTimeString().slice(0, 5)
+    } };
+  pintarVisita();
+}
+
+function pintarVisita(aviso){
+  const dd = ctx.datos, nueva = !ctx.id;
+  const g = k => dd[k] != null ? dd[k] : "";
+  const clientes = [...new Set([
+    ...A.unidades.map(u => u.cliente), ...(A.visitas || []).map(v => v.cliente)
+  ].filter(Boolean))].sort();
+  const gente = (A.perfiles || []).filter(p => p.nombre).map(p => p.nombre).sort();
+
+  abrirModal(
+    (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
+
+    '<label class="f"><span>Cliente</span><input class="inp" id="v-cliente" list="clientesVis" value="' +
+      esc(g("cliente")) + '"></label>' +
+    '<datalist id="clientesVis">' + clientes.map(c => '<option value="' + esc(c) + '">').join("") + '</datalist>' +
+    '<label class="f"><span>Ubicación del terminal</span><input class="inp" id="v-ubicacion" value="' +
+      esc(g("ubicacion")) + '" placeholder="Casino, portería, bodega"></label>' +
+    '<label class="f"><span>Dirección</span><input class="inp" id="v-direccion" value="' +
+      esc(g("direccion")) + '"></label>' +
+
+    '<div class="f2">' +
+      '<label class="f"><span>Técnico</span><input class="inp" id="v-tecnico" list="tecnicosVis" value="' +
+        esc(g("tecnico")) + '"></label>' +
+      '<label class="f"><span>Fecha</span><input class="inp" id="v-fecha" type="date" value="' +
+        esc(g("fecha") || hoy()) + '"></label>' +
+    '</div>' +
+    '<datalist id="tecnicosVis">' + gente.map(n => '<option value="' + esc(n) + '">').join("") + '</datalist>' +
+    '<div class="f2">' +
+      '<label class="f"><span>Hora de inicio</span><input class="inp" id="v-inicio" type="time" value="' +
+        esc(g("horaInicio")) + '"></label>' +
+      '<label class="f"><span>Hora de término</span><input class="inp" id="v-fin" type="time" value="' +
+        esc(g("horaFin")) + '"></label>' +
+    '</div>' +
+
+    '<div class="sec">Motivo</div>' +
+    '<label class="f"><span>Motivo de la visita</span><select class="inp" id="v-motivo">' +
+      motivosVisita().map(m => '<option' + (g("motivo") === m ? " selected" : "") + '>' + esc(m) +
+      '</option>').join("") + '</select></label>' +
+    (/^otra$/i.test(g("motivo"))
+      ? '<label class="f"><span>¿Cuál?</span><input class="inp" id="v-motivo-otro" value="' +
+        esc(g("motivoOtro")) + '" placeholder="Describe el motivo"></label>'
+      : "") +
+
+    '<div class="sec">Trabajo realizado</div>' +
+    '<label class="f"><span>Qué se hizo</span><textarea class="inp" id="v-trabajo" rows="3">' +
+      esc(g("trabajo")) + '</textarea></label>' +
+    '<label class="f"><span>Observaciones</span><textarea class="inp" id="v-observaciones" rows="2">' +
+      esc(g("observaciones")) + '</textarea></label>' +
+    '<label class="f"><span>Quedó pendiente</span><input class="inp" id="v-pendiente" value="' +
+      esc(g("pendiente")) + '"></label>' +
+
+    '<div class="sec">Fotos del trabajo</div>' +
+    '<div class="galeria-visita">' +
+      ctx.fotos.map((f, i) => '<div class="foto-v"><img src="' + esc(A.fotos[f] || "") + '" alt="">' +
+        '<button class="quita" data-quitafoto="' + (i + 1) + '">×</button></div>').join("") +
+      (ctx.fotos.length < 6
+        ? '<button class="foto-v agregar" data-accion="foto-visita">' +
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+          'stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 ' +
+          '012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>' +
+          '<span>Tomar foto</span></button>' : "") +
+    '</div>' +
+    '<input type="file" accept="image/*" capture="environment" id="file-visita" hidden>' +
+
+    '<div class="sec">Firmas</div>' +
+    cuadroFirma("tecnico", "Firma del técnico", ctx.firmaTecnico) +
+    '<label class="f"><span>Nombre de quien recibe</span><input class="inp" id="v-contacto" value="' +
+      esc(g("contacto")) + '"></label>' +
+    cuadroFirma("cliente", "Firma del cliente", ctx.firmaCliente) +
+
+    '<div class="sec">Evaluación del cliente</div>' +
+    '<div class="notas">' + [1,2,3,4,5,6,7,8,9,10].map(n =>
+      '<button class="nota' + (Number(g("evaluacion")) === n ? " on" : "") + '" data-nota="' + n + '">' +
+      n + '</button>').join("") + '</div>' +
+    '<p class="mini" style="margin:0">Opcional: cómo evalúa el cliente la atención, de 1 a 10.</p>' +
+
+    (A.zoho.activo || !nueva ? '<div class="sec">Registro en tareas</div>' +
+      '<label class="f"><span>Dejar constancia como tarea</span><select class="inp" id="v-tarea">' +
+      opciones(["Sí", "No"], ctx.conTarea === false ? "No" : "Sí") + '</select></label>' +
+      '<p class="mini" style="margin:0">Crea una tarea con el resumen de la visita' +
+      (A.zoho.activo && A.zoho.modo === "dos_vias" ? ", que se envía a Zoho" : "") +
+      '. Si algo quedó pendiente, la tarea queda abierta con ese texto.</p>' : "") +
+
+    '<button class="btn btn-celeste btn-w" data-accion="guardar-visita">' +
+      (nueva ? "Guardar la visita" : "Guardar cambios") + '</button>' +
+    '<button class="btn btn-linea btn-w" data-accion="guardar-visita-borrador">Guardar como borrador</button>' +
+    (ctx.id ? '<button class="btn btn-suave btn-w" data-accion="borrar-visita">Eliminar</button>' : ""),
+    ctx.id ? "Visita" : "Nueva visita");
+
+  /* las firmas se dibujan después de que el modal esté en pantalla */
+  prepararFirmas();
+}
+
+function cuadroFirma(quien, titulo, valor){
+  return '<div class="firma-caja" data-firma="' + quien + '">' +
+    '<div class="firma-hd"><b>' + esc(titulo) + '</b>' +
+      '<button class="btn btn-suave btn-sm" data-limpiafirma="' + quien + '">Borrar</button></div>' +
+    (valor
+      ? '<img class="firma-hecha" src="' + esc(valor) + '" alt="firma">'
+      : '<canvas class="firma-lienzo" id="firma-' + quien + '"></canvas>' +
+        '<span class="firma-ayuda">Firme con el dedo dentro del recuadro</span>') +
+    '</div>';
+}
+
+/* Captura de firmas: un lienzo por cada una, con trazo suave. */
+function prepararFirmas(){
+  for(const quien of ["tecnico", "cliente"]){
+    const c = document.getElementById("firma-" + quien);
+    if(!c) continue;
+    const caja = c.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const an = Math.max(240, Math.round(caja.width - 24)), al = 130;
+    c.width = an * dpr; c.height = al * dpr;
+    c.style.width = an + "px"; c.style.height = al + "px";
+    const x = c.getContext ? c.getContext("2d") : null;
+    if(!x) continue;
+    x.scale(dpr, dpr);
+    x.lineWidth = 2.2; x.lineCap = "round"; x.lineJoin = "round";
+    x.strokeStyle = "#1a1a1a";
+
+    let trazando = false, ux = 0, uy = 0, hubo = false;
+    const punto = ev => {
+      const r = c.getBoundingClientRect();
+      const t = ev.touches ? ev.touches[0] : ev;
+      return [t.clientX - r.left, t.clientY - r.top];
+    };
+    const inicio = ev => {
+      ev.preventDefault();
+      trazando = true; [ux, uy] = punto(ev);
+      x.beginPath(); x.moveTo(ux, uy); x.lineTo(ux + 0.1, uy); x.stroke();
+      hubo = true;
+    };
+    const mover = ev => {
+      if(!trazando) return;
+      ev.preventDefault();
+      const [nx, ny] = punto(ev);
+      /* punto medio: suaviza el trazo del dedo */
+      x.beginPath(); x.moveTo(ux, uy);
+      x.quadraticCurveTo(ux, uy, (ux + nx) / 2, (uy + ny) / 2);
+      x.stroke();
+      ux = nx; uy = ny;
+    };
+    const fin = () => {
+      if(!trazando) return;
+      trazando = false;
+      if(hubo) ctx["firma" + (quien === "tecnico" ? "Tecnico" : "Cliente")] = recortarFirma(c);
+    };
+    c.addEventListener("pointerdown", inicio);
+    c.addEventListener("pointermove", mover);
+    c.addEventListener("pointerup", fin);
+    c.addEventListener("pointerleave", fin);
+    c.addEventListener("touchstart", inicio, { passive: false });
+    c.addEventListener("touchmove", mover, { passive: false });
+    c.addEventListener("touchend", fin);
+  }
+}
+
+/* Guarda la firma recortada a su contenido, para que no pese de más. */
+function recortarFirma(c){
+  const x = c && c.getContext ? c.getContext("2d") : null;
+  if(!x) return "";                      /* navegador sin lienzo */
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  let x0 = c.width, y0 = c.height, x1 = 0, y1 = 0, hay = false;
+  for(let y = 0; y < c.height; y++){
+    for(let xx = 0; xx < c.width; xx++){
+      if(d[(y * c.width + xx) * 4 + 3] > 10){
+        hay = true;
+        if(xx < x0) x0 = xx; if(xx > x1) x1 = xx;
+        if(y < y0) y0 = y;   if(y > y1) y1 = y;
+      }
+    }
+  }
+  if(!hay) return "";
+  const m = 8;
+  x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m);
+  x1 = Math.min(c.width, x1 + m); y1 = Math.min(c.height, y1 + m);
+  const w = x1 - x0, h = y1 - y0;
+  const r = document.createElement("canvas");
+  const esc2 = Math.min(1, 600 / w);
+  r.width = Math.round(w * esc2); r.height = Math.round(h * esc2);
+  const rx = r.getContext("2d");
+  rx.fillStyle = "#fff"; rx.fillRect(0, 0, r.width, r.height);
+  rx.drawImage(c, x0, y0, w, h, 0, 0, r.width, r.height);
+  return r.toDataURL("image/png");
+}
+
+function leerVisita(){
+  const v = id => { const e = document.getElementById(id); return e ? e.value : null; };
+  const d = ctx.datos;
+  [["cliente","v-cliente"],["ubicacion","v-ubicacion"],["direccion","v-direccion"],
+   ["motivo","v-motivo"],["tecnico","v-tecnico"],["fecha","v-fecha"],["horaInicio","v-inicio"],
+   ["horaFin","v-fin"],["trabajo","v-trabajo"],["observaciones","v-observaciones"],
+   ["pendiente","v-pendiente"],["contacto","v-contacto"]].forEach(([k, id]) => {
+    if(v(id) !== null) d[k] = v(id);
+  });
+  if(v("v-motivo-otro") !== null) d.motivoOtro = v("v-motivo-otro");
+  if(v("v-tarea") !== null) ctx.conTarea = v("v-tarea") === "Sí";
+  /* firmas aún sin soltar el dedo */
+  for(const quien of ["tecnico", "cliente"]){
+    const c = document.getElementById("firma-" + quien);
+    const clave = "firma" + (quien === "tecnico" ? "Tecnico" : "Cliente");
+    if(c && !ctx[clave]){ const f = recortarFirma(c); if(f) ctx[clave] = f; }
+  }
+}
+
+async function fotoVisita(){
+  leerVisita();
+  const inp = document.getElementById("file-visita");
+  if(!inp) return;
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    inp.value = "";
+    if(!f) return;
+    try{
+      const data = await comprimir(f, 1400, 0.72);
+      const id = uuid();
+      await guardarFoto(id, data);
+      ctx.fotos.push(id);
+      pintarVisita();
+    }catch(e){ pintarVisita("No se pudo usar esa foto: " + e.message); }
+  };
+  inp.click();
+}
+
+async function guardarVisita(borrador){
+  leerVisita();
+  const d = ctx.datos;
+  if(!d.cliente) return pintarVisita("Falta el cliente");
+  if(!borrador && !ctx.firmaCliente)
+    return pintarVisita("Falta la firma del cliente. Si aún no puede firmar, guarda como borrador.");
+
+  let v;
+  const campos = {
+    cliente: d.cliente, ubicacion: d.ubicacion || "", direccion: d.direccion || "",
+    contacto: d.contacto || "", telefono: d.telefono || "",
+    tecnico: d.tecnico || "",
+    motivo: (/^otra$/i.test(d.motivo || "") && d.motivoOtro) ? d.motivoOtro : (d.motivo || ""),
+    series: ctx.series || [],
+    observaciones: d.observaciones || "", trabajo: d.trabajo || "", pendiente: d.pendiente || "",
+    fotos: ctx.fotos || [], firmaTecnico: ctx.firmaTecnico || "", firmaCliente: ctx.firmaCliente || "",
+    evaluacion: d.evaluacion || null, fecha: d.fecha || hoy(),
+    horaInicio: d.horaInicio || null, horaFin: d.horaFin || null,
+    estado: borrador ? "Borrador" : "Cerrada"
+  };
+
+  if(ctx.id){
+    v = A.visitas.find(x => x.id === ctx.id);
+    Object.assign(v, campos);
+  } else {
+    v = Object.assign({ id: uuid(), folio: folioVisita(),
+      creadorNombre: Sesion.nombre || Sesion.email || "local" }, campos);
+    A.visitas.unshift(v);
+  }
+  await persistir("visitas", v);
+  if(!borrador && ctx.conTarea !== false) await tareaDeVisita(v);
+  registrar((ctx.id ? "Visita editada: " : "Visita registrada: ") + v.cliente +
+    " · " + (v.motivo || ""), (v.series || [])[0] || "");
+  A.selEq = {};
+  cerrarModal(); pintar();
+  avisar(borrador ? "Guardada como borrador" : "Visita registrada");
+}
+
+/* Deja la visita registrada como tarea. Si quedó algo pendiente, la tarea
+   nace abierta con ese texto; si no, nace cerrada como constancia. Al
+   guardarla se envía sola a Zoho cuando la integración está en dos vías. */
+async function tareaDeVisita(v){
+  const quedaAlgo = !!(v.pendiente || "").trim();
+  const titulo = (v.motivo || "Visita") + " · " + v.cliente +
+    (v.ubicacion ? " · " + v.ubicacion : "");
+  const detalle = [
+    v.direccion ? "Dirección: " + v.direccion : "",
+    v.tecnico ? "Técnico: " + v.tecnico : "",
+    v.contacto ? "Recibió: " + v.contacto : "",
+    v.horaInicio ? "Horario: " + v.horaInicio + (v.horaFin ? " a " + v.horaFin : "") : "",
+    v.trabajo ? "\nTrabajo realizado:\n" + v.trabajo : "",
+    v.observaciones ? "\nObservaciones:\n" + v.observaciones : "",
+    quedaAlgo ? "\nPendiente:\n" + v.pendiente : "",
+    v.evaluacion ? "\nEvaluación del cliente: " + v.evaluacion + " de 10" : "",
+    v.folio ? "\nInforme " + v.folio : ""
+  ].filter(Boolean).join("\n");
+
+  /* el técnico, si tiene cuenta en la app */
+  const p = perfilPorNombre(v.tecnico);
+  const campos = {
+    titulo: titulo,
+    detalle: detalle,
+    prioridad: "Normal",
+    estado: quedaAlgo ? "Pendiente" : "Hecha",
+    solucion: v.trabajo || "",
+    cerrada: quedaAlgo ? null : new Date().toISOString(),
+    vence: v.fecha || hoy(),
+    cliente: v.cliente,
+    asignadoA: p ? p.id : null,
+    asignadoNombre: p ? (p.nombre || p.email) : (v.tecnico || "")
+  };
+
+  let t = v.tareaId ? A.tareas.find(x => x.id === v.tareaId) : null;
+  if(t){
+    Object.assign(t, campos);
+  } else {
+    t = Object.assign({ id: uuid(), creada: new Date().toISOString(),
+      creadorNombre: Sesion.nombre || Sesion.email || "local" }, campos);
+    A.tareas.unshift(t);
+    v.tareaId = t.id;
+  }
+  await persistir("tareas", t);
+  await persistir("visitas", v);          /* queda guardado el vínculo */
+  empujarAZoho(t.id);
+  return t;
+}
+
+function folioVisita(){
+  const n = (A.visitas || []).length + 1;
+  return "V" + hoy().slice(2, 4) + hoy().slice(5, 7) + "-" + String(n).padStart(3, "0");
+}
+
+/* ------------------------------------------------------- ficha y PDF */
+function fichaVisita(id){
+  const v = A.visitas.find(x => x.id === id);
+  if(!v) return;
+  ctx = { tipo: "ficha-visita", id: id };
+  abrirModal(
+    '<div class="fila" style="display:block;background:var(--fondo)"><div class="t">' +
+      '<b style="font-size:15px">' + esc(v.cliente) + '</b>' +
+      '<span>' + esc(v.motivo || "") + (v.ubicacion ? " · " + esc(v.ubicacion) : "") + '</span>' +
+      '<span>' + fechaCorta(v.fecha) +
+        (v.horaInicio ? " · " + esc(v.horaInicio) + (v.horaFin ? " a " + esc(v.horaFin) : "") : "") + '</span>' +
+    '</div>' + (v.estado === "Borrador" ? '<span class="pt pt-rev">Borrador</span>' : "") + '</div>' +
+
+    '<div class="fila" style="display:block"><table class="specs">' +
+      (v.folio ? '<tr><td>Folio</td><td>' + esc(v.folio) + '</td></tr>' : "") +
+      (v.tecnico ? '<tr><td>Técnico</td><td>' + esc(v.tecnico) + '</td></tr>' : "") +
+      (v.contacto ? '<tr><td>Recibió</td><td>' + esc(v.contacto) + '</td></tr>' : "") +
+      (v.direccion ? '<tr><td>Dirección</td><td>' + esc(v.direccion) + '</td></tr>' : "") +
+      ((v.series || []).length ? '<tr><td>Equipos</td><td>' + esc(v.series.join(", ")) + '</td></tr>' : "") +
+      (v.evaluacion ? '<tr><td>Evaluación</td><td>' + v.evaluacion + ' de 10</td></tr>' : "") +
+      (v.tareaId ? '<tr><td>Tarea asociada</td><td>' +
+        (() => { const t = A.tareas.find(x => x.id === v.tareaId);
+          return t ? esc(t.estado) + (t.zohoId ? " · Zoho " + esc(t.zohoId) : " · sin enviar a Zoho")
+                   : "ya no existe"; })() + '</td></tr>' : "") +
+    '</table></div>' +
+
+    (v.trabajo ? '<div class="sec">Trabajo realizado</div><p class="mini" style="margin:0">' +
+      esc(v.trabajo) + '</p>' : "") +
+    (v.observaciones ? '<div class="sec">Observaciones</div><p class="mini" style="margin:0">' +
+      esc(v.observaciones) + '</p>' : "") +
+    (v.pendiente ? '<p class="aviso">Pendiente: ' + esc(v.pendiente) + '</p>' : "") +
+
+    ((v.fotos || []).length ? '<div class="sec">Fotos</div><div class="galeria-visita">' +
+      v.fotos.map(f => '<div class="foto-v"><img src="' + esc(A.fotos[f] || "") + '" alt=""></div>').join("") +
+      '</div>' : "") +
+
+    '<div class="sec">Firmas</div><div class="f2">' +
+      '<div><p class="mini" style="margin:0 0 4px">Técnico</p>' +
+      (v.firmaTecnico ? '<img class="firma-hecha" src="' + esc(v.firmaTecnico) + '">' :
+        '<p class="mini">sin firma</p>') + '</div>' +
+      '<div><p class="mini" style="margin:0 0 4px">Cliente</p>' +
+      (v.firmaCliente ? '<img class="firma-hecha" src="' + esc(v.firmaCliente) + '">' :
+        '<p class="mini">sin firma</p>') + '</div></div>' +
+
+    '<button class="btn btn-azul btn-w" data-accion="pdf-visita">Descargar el informe en PDF</button>' +
+    (v.tareaId && A.tareas.some(t => t.id === v.tareaId)
+      ? '<button class="btn btn-linea btn-w" data-accion="ver-tarea-visita">Ver la tarea asociada</button>' : "") +
+    '<button class="btn btn-linea btn-w" data-accion="editar-visita">Editar</button>',
+    "Visita");
+}
+
+/* Informe de la visita en PDF, con fotos y firmas. */
+async function pdfVisita(id){
+  const v = A.visitas.find(x => x.id === id);
+  if(!v) return;
+  await cargarJsPDF();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const AN = 210, M = 15;
+  let y = 0;
+
+  /* cabecera */
+  doc.setFillColor(30, 85, 145); doc.rect(0, 0, AN, 30, "F");
+  const l64 = await logoBase64();
+  if(l64){ try{ doc.addImage(l64, "PNG", M, 9.5, 29.9, 11.5); }catch(e){} }
+  doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+  doc.text("INFORME DE VISITA", AN - M, 15, { align: "right" });
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+  doc.text((v.folio || "") + "   ·   " + fechaLarga(v.fecha), AN - M, 22, { align: "right" });
+  y = 40;
+
+  const linea = (k, val) => {
+    if(!val) return;
+    doc.setTextColor(100); doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text(k, M, y);
+    doc.setTextColor(40); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    const txt = doc.splitTextToSize(String(val), AN - M - 62);
+    doc.text(txt, M + 46, y);
+    y += Math.max(7, txt.length * 5 + 2);
+  };
+
+  doc.setTextColor(30, 85, 145); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+  doc.text(v.cliente, M, y); y += 8;
+
+  linea("Ubicación del terminal", v.ubicacion);
+  linea("Dirección", v.direccion);
+  linea("Motivo", v.motivo);
+  linea("Técnico", v.tecnico);
+  linea("Horario", v.horaInicio ? v.horaInicio + (v.horaFin ? " a " + v.horaFin : "") : "");
+  linea("Equipos", (v.series || []).join(", "));
+  linea("Trabajo realizado", v.trabajo);
+  linea("Observaciones", v.observaciones);
+  linea("Pendiente", v.pendiente);
+  if(v.evaluacion) linea("Evaluación del cliente", v.evaluacion + " de 10");
+
+  /* fotos, en dos columnas */
+  const fotos = (v.fotos || []).map(f => A.fotos[f]).filter(Boolean);
+  if(fotos.length){
+    y += 3;
+    doc.setTextColor(30, 85, 145); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.text("REGISTRO FOTOGRÁFICO", M, y); y += 5;
+    const an = (AN - M * 2 - 6) / 2, al = an * 0.72;
+    fotos.forEach((f, i) => {
+      const cx = M + (i % 2) * (an + 6);
+      if(i % 2 === 0 && y + al > 258){ doc.addPage(); y = 20; }
+      try{ doc.addImage(f, "JPEG", cx, y, an, al); }catch(e){}
+      if(i % 2 === 1 || i === fotos.length - 1) y += al + 5;
+    });
+  }
+
+  /* firmas al pie */
+  if(y > 215){ doc.addPage(); y = 25; }
+  y = Math.max(y + 6, 225);
+  const anF = (AN - M * 2 - 14) / 2;
+  [["Técnico", v.firmaTecnico, v.tecnico], ["Cliente", v.firmaCliente, v.contacto]]
+    .forEach(([rotulo, img, nombre], i) => {
+      const cx = M + i * (anF + 14);
+      if(img){ try{ doc.addImage(img, "PNG", cx + 4, y, anF - 8, 20); }catch(e){} }
+      doc.setDrawColor(190); doc.line(cx, y + 23, cx + anF, y + 23);
+      doc.setTextColor(40); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      doc.text(nombre || rotulo, cx + anF / 2, y + 28, { align: "center" });
+      doc.setTextColor(120); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.text("Firma " + rotulo.toLowerCase(), cx + anF / 2, y + 32.5, { align: "center" });
+    });
+
+  /* pie */
+  doc.setFillColor(183, 211, 103); doc.rect(0, 287, AN, 10, "F");
+  doc.setTextColor(30, 85, 145); doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+  doc.text("Rex+ · Tecnología de asistencia", M, 293);
+  doc.text("Documento generado el " + fechaLarga(hoy()), AN - M, 293, { align: "right" });
+
+  doc.save("visita-" + (v.folio || v.cliente).replace(/[^\w-]+/g, "-") + ".pdf");
+  registrar("Informe de visita descargado: " + v.cliente, (v.series || [])[0] || "");
+}
+
+async function borrarVisita(){
+  const v = A.visitas.find(x => x.id === ctx.id);
+  if(!v) return;
+  for(const f of (v.fotos || [])) await guardarFoto(f, null);
+  A.visitas = A.visitas.filter(x => x.id !== v.id);
+  if(REMOTO){
+    try{ await API.req("DELETE", "visitas?id=eq." + encodeURIComponent(v.id)); }
+    catch(e){ fallo(e, "visitas"); }
+  } else await guardar("visitas");
+  registrar("Visita eliminada: " + v.cliente, "");
+  cerrarModal(); pintar();
+  avisar("Visita eliminada");
+}
+
 function vistaEnvios(){
   const q = A.q.toLowerCase();
   const f = A.filtro === "Todas" ? "Activos" : A.filtro;
@@ -4532,7 +5105,7 @@ function pintar(){
   const v = { stock: vistaStock, equipos: vistaEquipos, proveedores: vistaProveedores, movs: vistaMovs,
     ajustes: vistaAjustes, dispo: vistaDisponibilidad, cuenta: vistaCuenta, cotiza: vistaCotizador,
     reportes: vistaReportes, taller: vistaTaller, tareas: vistaTareas, panel: vistaPanel,
-    envios: vistaEnvios, clientes: vistaClientes }[A.vista];
+    envios: vistaEnvios, clientes: vistaClientes, visitas: vistaVisitas }[A.vista];
   document.getElementById("vista").innerHTML =
     (!REMOTO && location.protocol.indexOf("http") === 0
       ? '<div class="aviso" style="margin-top:14px;background:var(--ambar-soft);color:var(--ambar-texto)">' +
@@ -6376,7 +6949,7 @@ async function borrarTodo(){
 
 /* ------------------------------------------------------------------ eventos */
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy],[data-ir],[data-pgrupo],[data-pperiodo],[data-envio],[data-cxserv],[data-cliente],[data-climod],[data-coti]");
+  const t = ev.target.closest("[data-nav],[data-cat],[data-bajos],[data-sit],[data-modelo],[data-unidad],[data-proveedor],[data-accion],[data-abrir],[data-cerrar],[data-velo],[data-foto-idx],[data-quitar-foto],[data-factura],[data-quitar-serie],[data-cot],[data-quitar-linea],[data-cotiza],[data-linea],[data-rep],[data-periodo],[data-panel],[data-col],[data-selfila],[data-vaciarmod],[data-seleq],[data-mant],[data-sitm],[data-usuario],[data-tarea],[data-hecha],[data-persona],[data-zproy],[data-ir],[data-pgrupo],[data-pperiodo],[data-envio],[data-cxserv],[data-cliente],[data-climod],[data-coti],[data-visita],[data-visitacli],[data-nota],[data-quitafoto],[data-limpiafirma]");
   if(!t) return;
   const d = t.dataset;
 
@@ -6440,6 +7013,17 @@ document.addEventListener("click", async ev => {
   if(d.usuario) return modalUsuario(d.usuario);
   if(d.zproy) return elegirProyectoZoho(d.zproy);
   if(d.persona){ A.filtroPersona = d.persona; A.filtro = "Todo"; return pintar(); }
+  if(d.visita) return fichaVisita(d.visita);
+  if(d.visitacli){ A.filtro = "Todas"; A.q = d.visitacli;
+    const campo = document.getElementById("q"); if(campo) campo.value = d.visitacli;
+    return pintar(); }
+  if(d.nota){ leerVisita(); ctx.datos.evaluacion = Number(d.nota); return pintarVisita(); }
+  if(d.quitafoto){ leerVisita(); ctx.fotos.splice(Number(d.quitafoto) - 1, 1); return pintarVisita(); }
+  if(d.limpiafirma){
+    leerVisita();
+    ctx["firma" + (d.limpiafirma === "tecnico" ? "Tecnico" : "Cliente")] = "";
+    return pintarVisita();
+  }
   if(d.cliente) return fichaCliente(d.cliente);
   if(d.climod) return equiposClienteModelo(d.climod);
   if(d.envio) return fichaEnvio(d.envio);
@@ -6461,6 +7045,7 @@ document.addEventListener("click", async ev => {
   if(d.abrir === "nuevo-taller") return modalNuevoTaller("");
   if(d.abrir === "nueva-tarea") return modalTarea(null);
   if(d.abrir === "nuevo-envio") return modalEnvio(null);
+  if(d.abrir === "nueva-visita") return modalVisita(null);
 
   const a = d.accion;
   if(a === "entrar") return entrar();
@@ -6730,6 +7315,17 @@ document.addEventListener("click", async ev => {
   if(a === "deshacer-importacion") return modalDeshacer();
   if(a === "confirmar-deshacer") return deshacerImportacion();
   if(a === "mas-menu") return menuMas();
+  if(a === "foto-visita") return fotoVisita();
+  if(a === "guardar-visita") return guardarVisita(false);
+  if(a === "guardar-visita-borrador") return guardarVisita(true);
+  if(a === "editar-visita"){ const id = ctx.id; cerrarModal(); return modalVisita(id); }
+  if(a === "pdf-visita") return pdfVisita(ctx.id);
+  if(a === "ver-tarea-visita"){
+    const v = A.visitas.find(x => x.id === ctx.id);
+    cerrarModal();
+    return modalTarea(v.tareaId);
+  }
+  if(a === "borrar-visita") return borrarVisita();
   if(a === "cx-ajustes") return modalCX("");
   if(a === "guardar-cx") return guardarCX();
   if(a === "probar-cx") return probarCX();
@@ -6795,6 +7391,9 @@ document.addEventListener("change", async ev => {
   if(ev.target.id === "eq-modelo"){ A.filtroModelo = ev.target.value; return pintar(); }
   if(ev.target.id === "eq-tipo"){ A.filtroTipo = ev.target.value; return pintar(); }
   if(ev.target.id === "t-persona"){ A.filtroPersona = ev.target.value; return pintar(); }
+  if(ev.target.id === "v-motivo" && ctx && ctx.tipo === "visita"){
+    leerVisita(); ctx.datos.motivo = ev.target.value; return pintarVisita();
+  }
   if(ev.target.id === "t-grupo"){ A.filtroGrupo = ev.target.value; A.filtroPersona = ""; return pintar(); }
   if(ev.target.id === "t-periodo"){ A.periodoT = ev.target.value; return pintar(); }
   if(ev.target.id === "t-orden"){ A.ordenT = ev.target.value; return pintar(); }
@@ -6861,6 +7460,7 @@ document.addEventListener("change", async ev => {
 document.getElementById("q").addEventListener("input", e => { A.q = e.target.value.trim(); pintar(); });
 document.getElementById("fab").addEventListener("click", () => {
   if(A.vista === "proveedores") return modalProveedor(null);
+  if(A.vista === "visitas") return modalVisita(null);
   if(A.vista === "envios") return modalEnvio(null);
   if(A.vista === "tareas") return modalTarea(null);
   if(A.vista === "taller") return modalNuevoTaller("");
@@ -7059,6 +7659,7 @@ function vigilar(){
     A.mantenimientos = (await Store.get("mantenimientos")) || [];
     A.tareas = (await Store.get("tareas")) || [];
     A.envios = (await Store.get("envios")) || [];
+    A.visitas = (await Store.get("visitas")) || [];
     A.direcciones = (await Store.get("direcciones")) || [];
     pintar();
     for(const m of A.modelos){ await cargarFotosModelo(m); }
