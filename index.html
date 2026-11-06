@@ -1487,6 +1487,33 @@ function cargarJsPDF(){
   return jsPDFListo;
 }
 
+/* El logo es azul, así que sobre la banda azul no se ve. Esta versión pinta
+   de blanco su silueta, sin necesidad de un segundo archivo. */
+async function logoBlanco64(){
+  if(A.logoBlanco !== undefined) return A.logoBlanco;
+  A.logoBlanco = null;
+  try{
+    const base = await logoBase64();
+    if(!base) return null;
+    const img = await new Promise((ok, fail) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = fail;
+      i.src = base;
+    });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth || 500; c.height = img.naturalHeight || 192;
+    const x = c.getContext("2d");
+    if(!x) return null;
+    x.drawImage(img, 0, 0);
+    x.globalCompositeOperation = "source-in";   /* pinta solo donde hay dibujo */
+    x.fillStyle = "#ffffff";
+    x.fillRect(0, 0, c.width, c.height);
+    A.logoBlanco = c.toDataURL("image/png");
+  }catch(e){ A.logoBlanco = null; }
+  return A.logoBlanco;
+}
+
 async function logoBase64(){
   if(A.logo64 !== undefined) return A.logo64;
   try{
@@ -2322,12 +2349,10 @@ const PDF_GRIS = [104, 128, 141], PDF_LINEA = [226, 236, 242], PDF_TEXTO = [44, 
 async function cabeceraRex(doc, W, titulo, der1, der2){
   doc.setFillColor(...PDF_AZUL);
   doc.rect(0, 0, W, 30, "F");
-  const l64 = await logoBase64();
+  const l64 = await logoBlanco64() || await logoBase64();
   if(l64){
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(12, 6, 44, 18, 2.5, 2.5, "F");
     /* el logo mide 500 × 192, proporción 2,6: hay que respetarla */
-    try{ doc.addImage(l64, "PNG", 15, 9.5, 29.9, 11.5); }catch(e){}
+    try{ doc.addImage(l64, "PNG", 12, 9.5, 29.9, 11.5); }catch(e){}
   } else {
     doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(18);
     doc.text("Rex+", 16, 19);
@@ -4224,7 +4249,7 @@ async function pdfVisita(id){
 
   /* cabecera */
   doc.setFillColor(30, 85, 145); doc.rect(0, 0, AN, 30, "F");
-  const l64 = await logoBase64();
+  const l64 = await logoBlanco64() || await logoBase64();
   if(l64){ try{ doc.addImage(l64, "PNG", M, 9.5, 29.9, 11.5); }catch(e){} }
   doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
   doc.text("INFORME DE VISITA", AN - M, 15, { align: "right" });
