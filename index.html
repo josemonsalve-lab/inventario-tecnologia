@@ -6824,6 +6824,7 @@ async function probarCX(){
       " · cuenta " + j.cuenta + " · RUT " + j.rut +
       ((j.faltan || []).length ? " · faltan claves: " + j.faltan.join(", ") : "") +
       "  —  Tarificación: " + (j.tarifa || "no probada") +
+      (j.cobertura ? "  —  Cobertura: " + j.cobertura.slice(0, 160) : "") +
       (!bienTarifa && j.tarifa_sin_cuenta && j.tarifa_sin_cuenta !== "no probada"
         ? "  —  Sin la cuenta: " + j.tarifa_sin_cuenta : ""), bienTarifa);
   }catch(e){ modalCX(e.message); }
