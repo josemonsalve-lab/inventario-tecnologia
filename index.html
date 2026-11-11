@@ -4572,6 +4572,8 @@ async function cargarComunasCX(){
   avisar("Consultando a Chilexpress…");
   try{
     const j = await llamarCX({ accion: "comunas" });
+    if(!j.comunas || !j.comunas.length)
+      return pintarEnvio((j.error || "Sin comunas") + detalleIntentos(j));
     A.comunasCX = j.comunas || [];
     await Store.set("comunasCX", A.comunasCX);
     pintarEnvio(A.comunasCX.length + " comunas cargadas de " + (j.regiones || "?") + " regiones. " +
@@ -6768,7 +6770,8 @@ async function buscarOrigenCX(){
   try{
     if(!(A.comunasCX || []).length){
       const j = await llamarCX({ accion: "comunas" });
-      A.comunasCX = j.comunas || [];
+      if(!j.comunas || !j.comunas.length) return modalCX((j.error || "Sin comunas") + detalleIntentos(j));
+      A.comunasCX = j.comunas;
       await Store.set("comunasCX", A.comunasCX);
     }
     const n = sinTildes(nombre);
@@ -6786,6 +6789,13 @@ async function buscarOrigenCX(){
     ], "resolution=merge-duplicates,return=minimal");
     modalCX(c.nombre + " · código " + c.codigo, true);
   }catch(e){ modalCX(e.message); }
+}
+
+/* Detalle de los intentos cuando la cobertura no responde: así se ve qué
+   ruta probó y qué dijo Chilexpress en cada una. */
+function detalleIntentos(j){
+  const i = j.intentos || [];
+  return i.length ? " — " + i.map(x => x.ruta + ": " + (x.error || x.respuesta)).join("  ·  ") : "";
 }
 
 async function guardarCX(){
