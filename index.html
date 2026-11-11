@@ -3601,16 +3601,30 @@ const EST_ENVIO = ["Preparando", "En tránsito", "Entregado", "Anulado"];
 const CLASE_ENVIO = { "Preparando": "pt-rev", "En tránsito": "pt-res",
   "Entregado": "pt-disp", "Anulado": "pt-baja" };
 
-async function llamarCX(cuerpo){
-  const r = await fetch(API.base() + "/functions/v1/chilexpress", {
-    method: "POST", headers: API.cabeceras(),
-    body: JSON.stringify(Object.assign({ ambiente: A.cxAmbiente || "prueba" }, cuerpo || {}))
+/* Llama a una función del servidor. Si la sesión caducó, Supabase responde
+   401 antes de llegar a la función: se renueva el acceso y se reintenta. */
+async function llamarFuncion(nombre, cuerpo, reintento){
+  const r = await fetch(API.base() + "/functions/v1/" + nombre, {
+    method: "POST", headers: API.cabeceras(), body: JSON.stringify(cuerpo || {})
   });
-  let j = {};
-  try{ j = await r.json(); }catch(e){}
-  if(r.status === 404) throw new Error("Falta instalar la función 'chilexpress' en Supabase.");
-  if(!r.ok) throw new Error(j.error || ("Error " + r.status));
+  let j = {}, crudo = "";
+  try{ crudo = await r.text(); j = JSON.parse(crudo); }catch(e){}
+
+  if(r.status === 401 && !j.error && !reintento){
+    try{ await API.renovar(); }
+    catch(e){ throw new Error("Tu sesión caducó. Vuelve a entrar."); }
+    return llamarFuncion(nombre, cuerpo, true);
+  }
+  if(r.status === 404) throw new Error("Falta instalar la función '" + nombre + "' en Supabase.");
+  if(r.status === 504 || r.status === 546)
+    throw new Error("El servidor tardó demasiado y cortó la llamada. Vuelve a intentarlo.");
+  if(!r.ok) throw new Error(j.error || ("Error " + r.status + (crudo ? ": " + crudo.slice(0, 160) : "")));
   return j;
+}
+
+async function llamarCX(cuerpo){
+  return llamarFuncion("chilexpress",
+    Object.assign({ ambiente: A.cxAmbiente || "prueba" }, cuerpo || {}));
 }
 
 /* ----------------------------------------------------------- clientes */
@@ -6452,18 +6466,9 @@ async function invitarUsuario(){
 
 /* ------------------------------------------------------- Zoho Projects */
 async function llamarZoho(cuerpo){
-  const r = await fetch(API.base() + "/functions/v1/zoho", {
-    method: "POST", headers: API.cabeceras(), body: JSON.stringify(cuerpo || {})
-  });
-  let j = {}, crudo = "";
-  try{ crudo = await r.text(); j = JSON.parse(crudo); }catch(e){}
-  if(r.status === 404) throw new Error("Falta instalar la función 'zoho' en Supabase.");
-  if(r.status === 504 || r.status === 546)
-    throw new Error("La sincronización tardó demasiado y el servidor la cortó. " +
-      "Vuelve a intentarlo: lo ya guardado no se repite.");
-  if(!r.ok) throw new Error(j.error || ("Error " + r.status + (crudo ? ": " + crudo.slice(0, 200) : "")));
-  return j;
+  return llamarFuncion("zoho", cuerpo);
 }
+
 
 /* Envía una tarea en segundo plano. No interrumpe el trabajo, pero si falla
    deja el aviso a la vista en lugar de esconderlo en la consola. */
