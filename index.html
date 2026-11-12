@@ -5180,6 +5180,13 @@ function abrirModal(html, titulo){
     '<button data-cerrar="1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--n500)" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>' +
     '<div class="hoja-bd">' + html + '</div></div></div>';
 }
+/* ¿La ventana abierta tiene campos para llenar? */
+function hayFormulario(){
+  const hoja = document.querySelector(".hoja-bd");
+  if(!hoja) return false;
+  return !!hoja.querySelector("input:not([type=hidden]), textarea, select, canvas");
+}
+
 function cerrarModal(){ document.getElementById("modal").innerHTML = ""; ctx = {}; }
 function avisar(t){
   document.getElementById("toast").innerHTML = '<div class="toast">' + esc(t) + '</div>';
@@ -7003,7 +7010,12 @@ document.addEventListener("click", async ev => {
   if(!t) return;
   const d = t.dataset;
 
-  if(d.velo && ev.target === t) return cerrarModal();
+  /* Tocar fuera cierra solo las ventanas de lectura. Si hay un formulario
+     abierto no se cierra, para no perder lo escrito por un toque al costado. */
+  if(d.velo && ev.target === t){
+    if(hayFormulario()) return avisar("Usa la × para cerrar y no perder lo escrito");
+    return cerrarModal();
+  }
   if(d.cerrar) return cerrarModal();
 
   if(d.pgrupo){ A.panelGrupo = d.pgrupo; return pintar(); }
@@ -7517,7 +7529,11 @@ document.getElementById("fab").addEventListener("click", () => {
   if(A.vista === "equipos") return modalIngreso(null);
   return modalModelo(null);
 });
-document.addEventListener("keydown", e => { if(e.key === "Escape") cerrarModal(); });
+document.addEventListener("keydown", e => {
+  if(e.key !== "Escape") return;
+  if(hayFormulario()) return avisar("Usa la × para cerrar y no perder lo escrito");
+  cerrarModal();
+});
 
 /* Al girar el teléfono o cambiar el tamaño de la ventana, la barra se rehace:
    en pantalla ancha caben todas las secciones y "Más" sobra. */
