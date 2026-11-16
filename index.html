@@ -4518,28 +4518,32 @@ function seriesSeleccionadas(){
 
 function pintarEnvio(aviso){
   const e = ctx.id ? A.envios.find(x => x.id === ctx.id) : null;
-  const g = k => e && e[k] != null ? e[k] : "";
+  /* Primero lo que el usuario tiene escrito, después lo guardado: si no, al
+     volver a dibujar la ventana (por ejemplo al cotizar) se perdería. */
+  const g = k => (ctx[k] !== undefined && ctx[k] !== null && ctx[k] !== "")
+    ? ctx[k]
+    : (e && e[k] != null ? e[k] : "");
   const clientes = [...new Set(A.unidades.map(u => u.cliente).filter(Boolean))].sort();
-  const dir = (A.direcciones || []).find(d => d.cliente === (ctx.cliente || g("cliente")));
+  const dir = (A.direcciones || []).find(d => d.cliente === g("cliente"));
 
   abrirModal(
     (aviso ? '<div class="aviso">' + esc(aviso) + '</div>' : "") +
     '<label class="f"><span>Cliente</span><input class="inp" id="e-cliente" list="clientesEnv" value="' +
-      esc(ctx.cliente != null ? ctx.cliente : g("cliente")) + '"></label>' +
+      esc(g("cliente")) + '"></label>' +
     '<datalist id="clientesEnv">' + clientes.map(c => '<option value="' + esc(c) + '">').join("") + '</datalist>' +
     '<label class="f"><span>Dirección</span><input class="inp" id="e-direccion" value="' +
-      esc(ctx.direccion != null ? ctx.direccion : (g("direccion") || (dir ? dir.direccion : ""))) + '"></label>' +
+      esc(g("direccion") || (dir ? dir.direccion : "")) + '"></label>' +
     '<div class="f2"><label class="f"><span>Comuna</span><input class="inp" id="e-comuna" list="comunasCX" value="' +
-      esc(ctx.comuna || g("comuna") || (dir ? dir.comuna : "")) + '"></label>' +
+      esc(g("comuna") || (dir ? dir.comuna : "")) + '"></label>' +
     '<label class="f"><span>Teléfono</span><input class="inp" id="e-telefono" value="' +
-      esc(ctx.telefono != null ? ctx.telefono : (g("telefono") || (dir ? dir.telefono : ""))) + '"></label></div>' +
+      esc(g("telefono") || (dir ? dir.telefono : "")) + '"></label></div>' +
     '<datalist id="comunasCX">' + (A.comunasCX || []).map(c =>
       '<option value="' + esc(c.nombre) + '">').join("") + '</datalist>' +
     (!(A.comunasCX || []).length
       ? '<button class="btn btn-suave btn-w" data-accion="cargar-comunas">Cargar las comunas de Chilexpress</button>'
       : "") +
     '<label class="f"><span>Contacto que recibe</span><input class="inp" id="e-contacto" value="' +
-      esc(ctx.contacto != null ? ctx.contacto : (g("contacto") || (dir ? dir.contacto : ""))) + '"></label>' +
+      esc(g("contacto") || (dir ? dir.contacto : "")) + '"></label>' +
 
     '<div class="sec">Equipos</div>' +
     '<label class="f"><span>Series, separadas por coma o salto de línea</span>' +
