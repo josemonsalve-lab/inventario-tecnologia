@@ -4542,8 +4542,14 @@ function pintarEnvio(aviso){
     (!(A.comunasCX || []).length
       ? '<button class="btn btn-suave btn-w" data-accion="cargar-comunas">Cargar las comunas de Chilexpress</button>'
       : "") +
-    '<label class="f"><span>Contacto que recibe</span><input class="inp" id="e-contacto" value="' +
-      esc(g("contacto") || (dir ? dir.contacto : "")) + '"></label>' +
+    '<div class="f2">' +
+      '<label class="f"><span>Contacto que recibe</span><input class="inp" id="e-contacto" value="' +
+        esc(g("contacto") || (dir ? dir.contacto : "")) + '"></label>' +
+      '<label class="f"><span>Correo del destinatario</span><input class="inp" id="e-email" type="email" value="' +
+        esc(g("email") || (dir ? dir.email : "")) + '"></label>' +
+    '</div>' +
+    '<p class="mini" style="margin:0">Chilexpress le avisa a ese correo cuando el envío sale y cuando ' +
+    'llega. Si lo dejas vacío, usa el del remitente y el cliente no recibe nada.</p>' +
 
     '<div class="sec">Equipos</div>' +
     '<label class="f"><span>Series, separadas por coma o salto de línea</span>' +
@@ -4574,7 +4580,7 @@ function pintarEnvio(aviso){
 
 function leerEnvio(){
   const v = id => { const x = document.getElementById(id); return x ? x.value : null; };
-  ["cliente", "direccion", "comuna", "telefono", "contacto", "notas"].forEach(k => {
+  ["cliente", "direccion", "comuna", "telefono", "contacto", "email", "notas"].forEach(k => {
     if(v("e-" + k) !== null) ctx[k] = v("e-" + k);
   });
   ["peso", "alto", "ancho", "largo"].forEach(k => {
@@ -4624,6 +4630,7 @@ async function guardarEnvio(){
   const datos = {
     cliente: ctx.cliente, direccion: ctx.direccion || "", comuna: ctx.comuna || "",
     comunaCodigo: ctx.comunaCodigo || "", telefono: ctx.telefono || "", contacto: ctx.contacto || "",
+    email: ctx.email || "",
     series: ctx.series || [], peso: ctx.peso || 1, alto: ctx.alto || 20,
     ancho: ctx.ancho || 20, largo: ctx.largo || 30, notas: ctx.notas || "",
     servicio: sel ? sel.nombre : (ctx.id ? undefined : ""),
@@ -4678,7 +4685,8 @@ function pintarFichaEnvio(aviso){
     '<div class="fila" style="display:block;background:var(--fondo)"><div class="t">' +
       '<b style="font-size:15px">' + esc(e.cliente) + '</b>' +
       '<span>' + esc(e.direccion || "") + (e.comuna ? ", " + esc(e.comuna) : "") + '</span>' +
-      (e.contacto || e.telefono ? '<span>' + esc([e.contacto, e.telefono].filter(Boolean).join(" · ")) + '</span>' : "") +
+      (e.contacto || e.telefono || e.email
+        ? '<span>' + esc([e.contacto, e.telefono, e.email].filter(Boolean).join(" · ")) + '</span>' : "") +
       '</div><span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></div>' +
 
     '<div class="fila" style="display:block"><table class="specs">' +
