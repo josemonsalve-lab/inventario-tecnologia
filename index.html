@@ -4388,7 +4388,8 @@ function vistaEnvios(){
       '<span>' + (e.series || []).length + (e.series.length === 1 ? " equipo" : " equipos") +
         (e.comuna ? " · " + esc(e.comuna) : "") +
         (e.fecha ? " · " + fechaCorta(e.fecha) : "") + '</span>' +
-      (e.ot ? '<span>OT ' + esc(e.ot) + (e.servicio ? " · " + esc(e.servicio) : "") + '</span>' : "") +
+      (e.ot ? '<span>OT ' + esc(e.ot) + (e.servicio ? " · " + esc(e.servicio) : "") +
+        (e.ambiente === "prueba" ? " · de prueba" : "") + '</span>' : "") +
       (e.seguimiento && e.estado !== "Entregado" ? '<span class="detalle">' +
         esc(ultimoEstadoCX(e)) + '</span>' : "") + '</div>' +
       '<span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></button>').join("") +
@@ -4678,7 +4679,8 @@ function pintarFichaEnvio(aviso){
 
     '<div class="fila" style="display:block"><table class="specs">' +
       '<tr><td>Equipos</td><td>' + (e.series || []).length + '</td></tr>' +
-      (e.ot ? '<tr><td>Orden de transporte</td><td>' + esc(e.ot) + '</td></tr>' : "") +
+      (e.ot ? '<tr><td>Orden de transporte</td><td>' + esc(e.ot) +
+        (e.ambiente === "prueba" ? ' <span class="pt pt-rev">de prueba</span>' : "") + '</td></tr>' : "") +
       (e.servicio ? '<tr><td>Servicio</td><td>' + esc(e.servicio) + '</td></tr>' : "") +
       (tod.status ? '<tr><td>Estado en Chilexpress</td><td>' + esc(tod.status) +
         (tod.locationStatus ? " · " + esc(tod.locationStatus) : "") + '</td></tr>' : "") +
@@ -4702,6 +4704,10 @@ function pintarFichaEnvio(aviso){
         esc(x.certificadoEntrega) + '">Certificado</a>' : "") + '</div>').join("") + '</div>' : "") +
 
     (e.ot ? "" : '<button class="btn btn-azul btn-w" data-accion="emitir-ot">Emitir orden de transporte</button>') +
+    (e.ambiente === "prueba"
+      ? '<p class="aviso">Esta orden se emitió en el ambiente de pruebas: no existe en el portal de ' +
+        'Chilexpress ni genera un despacho real. Para una orden de verdad, cambia el ambiente a ' +
+        'producción en Ajustes y emítela de nuevo.</p>' : "") +
     (e.ot ? '<button class="btn btn-linea btn-w" data-accion="seguir-uno">Actualizar seguimiento</button>' : "") +
     (e.etiqueta ? '<button class="btn btn-linea btn-w" data-accion="ver-etiqueta">Ver la etiqueta</button>' : "") +
     (e.ot ? '<button class="btn btn-suave btn-w" data-accion="pedir-etiqueta">Volver a pedir la etiqueta</button>' : "") +
@@ -4715,6 +4721,9 @@ function pintarFichaEnvio(aviso){
 async function emitirOT(){
   const e = A.envios.find(x => x.id === ctx.id);
   if(!e.comunaCodigo) return pintarFichaEnvio("Falta la comuna de Chilexpress: edita los datos y elígela de la lista.");
+  if(A.cxAmbiente === "prueba" &&
+     !confirm("Estás en el ambiente de pruebas: la orden no será real ni aparecerá en el portal " +
+              "de Chilexpress. ¿Emitirla igual?")) return;
   avisar("Emitiendo la orden…");
   try{
     const j = await llamarCX({ accion: "crear", id: e.id });
