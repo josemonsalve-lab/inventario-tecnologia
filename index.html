@@ -6779,7 +6779,8 @@ async function modalCX(aviso, bien){
     campo("x-email", "Correo de contacto del remitente",
       "Chilexpress lo exige en las órdenes de transporte.") +
     campo("x-rut", "RUT de la empresa",
-      "Sin puntos ni dígito verificador, por ejemplo 77398220. El seguimiento no funciona sin él.") +
+      "Puedes escribirlo como quieras: la app le quita los puntos, el guion y el dígito " +
+      "verificador antes de consultar, porque Chilexpress lo pide así.") +
     campo("x-origen_nombre", "Comuna de origen") +
     campo("x-origen_codigo", "Código de esa comuna") +
     '<button class="btn btn-suave btn-w" data-accion="buscar-origen">Buscar el código de esa comuna</button>' +
