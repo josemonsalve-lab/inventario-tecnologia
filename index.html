@@ -4754,8 +4754,17 @@ async function seguirEnvios(uno){
     await sincronizar(true);
     pintar();
     if(uno){ fichaEnvio(e.id); }
-    const malos = (j.detalle || []).filter(x => x.error).length;
-    avisar("Revisados " + j.revisados + (malos ? ", " + malos + " con error" : ""));
+    const malos = (j.detalle || []).filter(x => x.error);
+    if(malos.length){
+      A.ultimoError = "Seguimiento con problemas · " + malos.map(x =>
+        "OT " + x.ot + ": " + x.error).join("  ·  ");
+      A.sinGuardar = true;
+      if(uno) return pintarFichaEnvio(malos[0].error);
+      pintar();
+      return avisar("Revisados " + j.revisados + ", " + malos.length + " con error. Mira el aviso rojo.");
+    }
+    const conEventos = (j.detalle || []).filter(x => x.eventos).length;
+    avisar("Revisados " + j.revisados + (conEventos ? " · " + conEventos + " con movimientos" : ""));
   }catch(err){
     if(uno) pintarFichaEnvio(err.message);
     else { A.ultimoError = "Chilexpress: " + err.message; A.sinGuardar = true; pintar(); }
