@@ -4737,7 +4737,14 @@ function pintarFichaEnvio(aviso){
     (e.ot ? '<button class="btn btn-linea btn-w" data-accion="seguir-uno">Actualizar seguimiento</button>' : "") +
     (certificadoDe(e)
       ? '<a class="btn btn-azul btn-w" target="_blank" rel="noopener" href="' +
-        esc(certificadoDe(e)) + '">Descargar el certificado de entrega</a>' : "") +
+        esc(certificadoDe(e)) + '">Descargar el certificado de entrega</a>'
+      : (e.ot
+        ? '<p class="mini" style="margin:0">' +
+          (ev.length
+            ? "Chilexpress todavía no publica el certificado de entrega de esta orden."
+            : "Aún no se ha consultado el seguimiento, o la consulta falló: el certificado de " +
+              "entrega aparece acá cuando Chilexpress lo publica.") + '</p>'
+        : "")) +
     (e.etiqueta ? '<button class="btn btn-linea btn-w" data-accion="ver-etiqueta">Ver la etiqueta</button>' : "") +
     (e.ot ? '<button class="btn btn-suave btn-w" data-accion="pedir-etiqueta">Volver a pedir la etiqueta</button>' : "") +
     '<button class="btn btn-linea btn-w" data-accion="editar-envio">Editar los datos</button>' +
