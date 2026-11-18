@@ -1175,6 +1175,12 @@ function vistaCuenta(){
       : REMOTO ? "Nunca" : "Sin base compartida configurada") + '</span></div></div>' +
     '<button class="btn btn-linea btn-w" data-accion="refrescar">Actualizar ahora</button>' +
     (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="cambiar-clave">Cambiar mi contraseña</button>' +
+      '<label class="f" style="margin-bottom:10px"><span>Cerrar sesión sola tras</span>' +
+      '<select class="inp" id="a-inactividad">' + MINUTOS_INACTIVO.map(([v, t]) =>
+        '<option value="' + v + '"' + (String(minutosInactividad()) === v ? " selected" : "") + '>' +
+        t + '</option>').join("") + '</select></label>' +
+      '<p class="mini" style="margin:0 0 10px">Si nadie usa la app durante ese rato, se cierra la ' +
+      'sesión. Evita que quede abierta en un computador compartido y que al volver tarde en responder.</p>' +
       '<button class="btn btn-rojo btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
             : '<button class="btn btn-linea btn-w" data-accion="ver-vendedor">Volver a vista de administrador</button>') +
     '</div>';
@@ -1332,6 +1338,10 @@ function vistaAjustes(){
       esc(Sesion.email || "modo local, sin cuentas") + ' · ' + esc(nombreRol(A.rol)) + '</span></div></div>' +
     (REMOTO ? '<button class="btn btn-suave btn-w" data-accion="refrescar-rol">Actualizar mi rol</button>' : "") +
     (REMOTO ? '<button class="btn btn-linea btn-w" data-accion="cambiar-clave">Cambiar mi contraseña</button>' +
+      '<label class="f" style="margin:10px 0"><span>Cerrar sesión sola tras</span>' +
+      '<select class="inp" id="a-inactividad2">' + MINUTOS_INACTIVO.map(([v, t]) =>
+        '<option value="' + v + '"' + (String(minutosInactividad()) === v ? " selected" : "") + '>' +
+        t + '</option>').join("") + '</select></label>' +
       '<button class="btn btn-linea btn-w" data-accion="pedir-salir">Cerrar sesión</button>'
             : '<button class="btn btn-linea btn-w" data-accion="ver-vendedor">Ver como vendedor</button>') +
     '<p class="mini" style="text-align:center;margin-top:8px">Los datos viven solo en este teléfono. Exporta cada cierto tiempo si quieres respaldo.</p></div>';
@@ -6796,6 +6806,53 @@ async function probarZoho(){
   }
 }
 
+/* ------------------------------------------------- cierre por inactividad
+   Dejar la app abierta horas la vuelve lenta al retomarla: la sesión caduca,
+   los datos quedan viejos y el primer movimiento dispara una sincronización
+   completa. Cerrarla sola evita eso y además protege la información cuando
+   el equipo queda desatendido. */
+const MINUTOS_INACTIVO = [["0","Nunca"],["15","15 minutos"],["30","30 minutos"],
+  ["60","1 hora"],["120","2 horas"],["480","8 horas"]];
+let relojInactivo = null, avisoInactivo = null;
+
+function minutosInactividad(){
+  const v = A.inactividad;
+  return v === undefined || v === null || v === "" ? 60 : Number(v);
+}
+
+function reiniciarInactividad(){
+  clearTimeout(relojInactivo); clearTimeout(avisoInactivo);
+  const min = minutosInactividad();
+  if(!min || !REMOTO || !Sesion.rol) return;
+
+  /* un minuto antes se avisa, para no cortar a alguien que está leyendo */
+  if(min > 2) avisoInactivo = setTimeout(() => {
+    avisar("La sesión se cerrará en un minuto por inactividad");
+  }, (min - 1) * 60000);
+
+  relojInactivo = setTimeout(cerrarPorInactividad, min * 60000);
+}
+
+async function cerrarPorInactividad(){
+  if(!REMOTO || !Sesion.rol) return;
+  await API.salir();
+  A.modelos = []; A.unidades = []; A.proveedores = []; A.movs = []; A.dispo = []; A.fotos = {}; A.rol = "";
+  cerrarModal();
+  document.getElementById("vista").innerHTML = "";
+  pintarLogin();
+  avisar("Sesión cerrada por inactividad");
+}
+
+/* Cualquier señal de que la persona sigue ahí reinicia la cuenta. */
+function vigilarInactividad(){
+  for(const ev of ["pointerdown", "keydown", "touchstart", "wheel"])
+    document.addEventListener(ev, reiniciarInactividad, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if(!document.hidden) reiniciarInactividad();
+  });
+  reiniciarInactividad();
+}
+
 /* --- datos del remitente para Chilexpress --- */
 async function modalCX(aviso, bien){
   let cfg = {};
@@ -7195,6 +7252,7 @@ document.addEventListener("click", async ev => {
     "Vas a salir de la cuenta <b>" + esc(Sesion.email || "") + "</b> en este dispositivo. " +
     "Los datos del inventario siguen en el servidor.", "salir", "Cerrar sesión", "rojo");
   if(a === "salir"){
+    clearTimeout(relojInactivo); clearTimeout(avisoInactivo);
     await API.salir();
     A.modelos = []; A.unidades = []; A.proveedores = []; A.movs = []; A.dispo = []; A.fotos = {}; A.rol = "";
     document.getElementById("vista").innerHTML = "";
@@ -7525,6 +7583,14 @@ document.addEventListener("change", async ev => {
   if(ev.target.id === "v-motivo" && ctx && ctx.tipo === "visita"){
     leerVisita(); ctx.datos.motivo = ev.target.value; return pintarVisita();
   }
+  if(ev.target.id === "a-inactividad" || ev.target.id === "a-inactividad2"){
+    A.inactividad = ev.target.value;
+    await Store.set("inactividad", A.inactividad);
+    reiniciarInactividad();
+    return avisar(Number(A.inactividad)
+      ? "La sesión se cerrará tras " + MINUTOS_INACTIVO.find(x => x[0] === A.inactividad)[1] + " sin uso"
+      : "La sesión quedará abierta");
+  }
   if(ev.target.id === "t-grupo"){ A.filtroGrupo = ev.target.value; A.filtroPersona = ""; return pintar(); }
   if(ev.target.id === "t-periodo"){ A.periodoT = ev.target.value; return pintar(); }
   if(ev.target.id === "t-orden"){ A.ordenT = ev.target.value; return pintar(); }
@@ -7759,6 +7825,8 @@ function vigilar(){
     await sincronizar(true); pintar();
   }, 20000);
   setInterval(() => { if(!document.hidden) pintarEstado(); }, 15000);
+  vigilarInactividad();
+
   window.addEventListener("focus", async () => {
     if(document.getElementById("modal").innerHTML) return;
     const cambio = await refrescarUFSiCambioElDia();
@@ -7775,6 +7843,7 @@ function vigilar(){
 (async function inicio(){
   await Store.iniciar();
   A.comunasCX = (await Store.get("comunasCX")) || [];
+  A.inactividad = await Store.get("inactividad");
   try{
     const guardada = await Store.get("conexion");
     if(conexionValida(guardada)){ CFG = guardada; REMOTO = true; }
