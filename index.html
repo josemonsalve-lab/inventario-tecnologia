@@ -4391,9 +4391,21 @@ function vistaEnvios(){
       (e.ot ? '<span>OT ' + esc(e.ot) + (e.servicio ? " · " + esc(e.servicio) : "") +
         (e.ambiente === "prueba" ? " · de prueba" : "") + '</span>' : "") +
       (e.seguimiento && e.estado !== "Entregado" ? '<span class="detalle">' +
-        esc(ultimoEstadoCX(e)) + '</span>' : "") + '</div>' +
+        esc(ultimoEstadoCX(e)) + '</span>' : "") +
+      (certificadoDe(e) ? '<span style="color:var(--lima-texto)">Con certificado de entrega</span>' : "") +
+      '</div>' +
       '<span class="pt ' + (CLASE_ENVIO[e.estado] || "pt-ent") + '">' + esc(e.estado) + '</span></button>').join("") +
     '</div>';
+}
+
+/* El certificado de entrega, firmado por quien recibió. Chilexpress no
+   siempre cambia el estado de la orden, pero el certificado solo aparece
+   cuando el envío llegó: es la señal confiable. */
+function certificadoDe(e){
+  if(e.certificado) return e.certificado;
+  const ev = ((e.seguimiento || {}).trackingEvents || []);
+  const c = ev.find(x => x.certificadoEntrega);
+  return c ? c.certificadoEntrega : "";
 }
 
 /* Chilexpress entrega los eventos del más reciente al más antiguo. */
@@ -4442,6 +4454,8 @@ function vistaSeguimiento(todos){
           ? '<span class="detalle"><b>' + esc(u.description) + '</b> · ' + esc(fechaEventoCX(u)) +
             (u.location ? " · " + esc(u.location) : "") + '</span>'
           : '<span class="mini">Sin movimientos registrados todavía</span>') +
+        (certificadoDe(e)
+          ? '<span style="color:var(--lima-texto)">Entregado · certificado disponible</span>' : "") +
         (e.revisado
           ? '<span class="mini"' + (viejo(e) ? ' style="color:var(--ambar-texto)"' : "") + '>Consultado ' +
             esc(haceCuanto(e.revisado)) + '</span>'
@@ -4721,6 +4735,9 @@ function pintarFichaEnvio(aviso){
         'Chilexpress ni genera un despacho real. Para una orden de verdad, cambia el ambiente a ' +
         'producción en Ajustes y emítela de nuevo.</p>' : "") +
     (e.ot ? '<button class="btn btn-linea btn-w" data-accion="seguir-uno">Actualizar seguimiento</button>' : "") +
+    (certificadoDe(e)
+      ? '<a class="btn btn-azul btn-w" target="_blank" rel="noopener" href="' +
+        esc(certificadoDe(e)) + '">Descargar el certificado de entrega</a>' : "") +
     (e.etiqueta ? '<button class="btn btn-linea btn-w" data-accion="ver-etiqueta">Ver la etiqueta</button>' : "") +
     (e.ot ? '<button class="btn btn-suave btn-w" data-accion="pedir-etiqueta">Volver a pedir la etiqueta</button>' : "") +
     '<button class="btn btn-linea btn-w" data-accion="editar-envio">Editar los datos</button>' +
