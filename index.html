@@ -197,6 +197,12 @@ details summary::-webkit-details-marker{display:none}
 .nota{padding:9px 0;border:1px solid var(--linea);border-radius:8px;background:#fff;
   color:var(--azul);font-weight:700;font-size:12px}
 .nota.on{background:var(--celeste);color:#fff;border-color:var(--celeste)}
+.btn.cargando{opacity:.85}
+.girando{display:inline-block;width:13px;height:13px;margin-right:7px;vertical-align:-2px;
+  border:2px solid currentColor;border-right-color:transparent;border-radius:100px;
+  animation:gira .7s linear infinite}
+@keyframes gira{to{transform:rotate(360deg)}}
+button[disabled],.btn[disabled]{opacity:.55;pointer-events:none}
 .menu-mas{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .menu-item{display:flex;align-items:center;gap:10px;padding:13px 12px;border:1px solid var(--linea);
   border-radius:12px;background:#fff;color:var(--azul);font-weight:700;font-size:13.5px;text-align:left}
@@ -3632,6 +3638,36 @@ async function llamarFuncion(nombre, cuerpo, reintento){
   return j;
 }
 
+/* ------------------------------------------- operaciones que tardan
+   Emitir una orden demora varios segundos. Sin bloqueo, un segundo clic
+   genera un segundo despacho, que se factura. Esto deshabilita la ventana
+   completa mientras dura y deja el botón en "trabajando". */
+let trabajando = false;
+
+async function conEspera(boton, texto, tarea){
+  if(trabajando){ avisar("Espera a que termine lo anterior"); return; }
+  trabajando = true;
+
+  const hoja = document.querySelector(".hoja-bd");
+  const botones = hoja ? [...hoja.querySelectorAll("button, a.btn, input, select, textarea")] : [];
+  const antes = boton ? boton.innerHTML : "";
+  for(const b of botones) b.setAttribute("disabled", "disabled");
+  if(boton){
+    boton.classList.add("cargando");
+    boton.innerHTML = '<span class="girando"></span>' + esc(texto || "Trabajando…");
+  }
+  try{
+    return await tarea();
+  } finally {
+    trabajando = false;
+    for(const b of botones) b.removeAttribute("disabled");
+    if(boton && document.body.contains(boton)){
+      boton.classList.remove("cargando");
+      boton.innerHTML = antes;
+    }
+  }
+}
+
 async function llamarCX(cuerpo){
   return llamarFuncion("chilexpress",
     Object.assign({ ambiente: A.cxAmbiente || "prueba" }, cuerpo || {}));
@@ -4645,10 +4681,10 @@ async function cargarComunasCX(){
   }catch(err){ pintarEnvio(err.message); }
 }
 
-async function cotizarEnvio(){
+async function cotizarEnvio(boton){
   leerEnvio();
   if(!ctx.comunaCodigo) return pintarEnvio("Elige una comuna de la lista de Chilexpress");
-  avisar("Cotizando…");
+  return conEspera(boton, "Cotizando…", async () => {
   try{
     const j = await llamarCX({ accion: "cotizar", destino: ctx.comunaCodigo,
       peso: ctx.peso, alto: ctx.alto, ancho: ctx.ancho, largo: ctx.largo });
@@ -4659,6 +4695,7 @@ async function cotizarEnvio(){
         ? "Chilexpress no reconoció la cuenta, así que estos son precios de lista, sin tu convenio."
         : ""));
   }catch(err){ pintarEnvio(err.message); }
+  });
 }
 
 async function guardarEnvio(){
@@ -4778,24 +4815,32 @@ function pintarFichaEnvio(aviso){
     "Envío");
 }
 
-async function emitirOT(){
+async function emitirOT(boton){
   const e = A.envios.find(x => x.id === ctx.id);
+  if(!e) return;
+  if(e.ot) return pintarFichaEnvio("Este envío ya tiene la orden " + e.ot + ".");
   if(!e.comunaCodigo) return pintarFichaEnvio("Falta la comuna de Chilexpress: edita los datos y elígela de la lista.");
   if(A.cxAmbiente === "prueba" &&
      !confirm("Estás en el ambiente de pruebas: la orden no será real ni aparecerá en el portal " +
               "de Chilexpress. ¿Emitirla igual?")) return;
-  avisar("Emitiendo la orden…");
-  try{
-    const j = await llamarCX({ accion: "crear", id: e.id });
-    await sincronizar(true);
-    pintar();
-    if(j.ot){ fichaEnvio(e.id); avisar("Orden " + j.ot + " emitida"); }
-    else pintarFichaEnvio("Chilexpress no devolvió número de orden. " + JSON.stringify(j.crudo || {}).slice(0, 200));
-  }catch(err){ pintarFichaEnvio(err.message); }
+
+  return conEspera(boton, "Emitiendo la orden…", async () => {
+    try{
+      const j = await llamarCX({ accion: "crear", id: e.id });
+      await sincronizar(true);
+      pintar();
+      if(j.ot){
+        fichaEnvio(e.id);
+        avisar(j.repetida ? "Ya tenía la orden " + j.ot : "Orden " + j.ot + " emitida");
+      }
+      else pintarFichaEnvio("Chilexpress no devolvió número de orden. " +
+        JSON.stringify(j.crudo || {}).slice(0, 200));
+    }catch(err){ pintarFichaEnvio(err.message); }
+  });
 }
 
-async function seguirEnvios(uno){
-  avisar("Consultando a Chilexpress…");
+async function seguirEnvios(uno, boton){
+  return conEspera(boton, "Consultando…", async () => {
   try{
     const e = uno ? A.envios.find(x => x.id === ctx.id) : null;
     const j = await llamarCX({ accion: "seguir", ot: e ? e.ot : "" });
@@ -4817,6 +4862,7 @@ async function seguirEnvios(uno){
     if(uno) pintarFichaEnvio(err.message);
     else { A.ultimoError = "Chilexpress: " + err.message; A.sinGuardar = true; pintar(); }
   }
+  });
 }
 
 async function cerrarEnvio(estado){
@@ -7452,12 +7498,12 @@ document.addEventListener("click", async ev => {
   if(a === "volver-tarea"){ ctx.paso = 1; return pintarTareaNueva(); }
   if(a === "confirmar-tarea") return crearTarea();
   if(a === "cargar-comunas") return cargarComunasCX();
-  if(a === "cotizar-envio") return cotizarEnvio();
+  if(a === "cotizar-envio") return cotizarEnvio(t);
   if(a === "guardar-envio") return guardarEnvio();
   if(a === "editar-envio"){ const id = ctx.id; cerrarModal(); return modalEnvio(id); }
-  if(a === "emitir-ot") return emitirOT();
-  if(a === "seguir-uno") return seguirEnvios(true);
-  if(a === "seguir-envios") return seguirEnvios(false);
+  if(a === "emitir-ot") return emitirOT(t);
+  if(a === "seguir-uno") return seguirEnvios(true, t);
+  if(a === "seguir-envios") return seguirEnvios(false, t);
   if(a === "consultar-ot") return consultarOT();
   if(a === "csv-cliente") return csvCliente();
   if(a === "volver-cliente") return fichaCliente(ctx.nombre);
